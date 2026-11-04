@@ -2,7 +2,7 @@ import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { colors } from '../constants/theme';
+import { useTheme } from '../constants/theme';
 import DashboardScreen from '../screens/DashboardScreen';
 import HistoryScreen from '../screens/HistoryScreen';
 import PeriodDetailScreen from '../screens/PeriodDetailScreen';
@@ -13,19 +13,19 @@ const Tab = createBottomTabNavigator();
 const HistoryStack = createNativeStackNavigator();
 const SettingsStack = createNativeStackNavigator();
 
-// Header look shared by both stacks
-const stackOptions = {
-  headerShadowVisible: false,
-  headerStyle: { backgroundColor: colors.background },
-  headerTitleStyle: { color: colors.text, fontWeight: '600' },
-  headerTintColor: colors.text,
-  contentStyle: { backgroundColor: colors.background },
-};
-
 // History tab: list of periods -> detail of one period
 function HistoryNavigator() {
+  const { colors } = useTheme();
   return (
-    <HistoryStack.Navigator screenOptions={stackOptions}>
+    <HistoryStack.Navigator
+      screenOptions={{
+        headerShadowVisible: false,
+        headerStyle: { backgroundColor: colors.background },
+        headerTitleStyle: { color: colors.text, fontWeight: '600' },
+        headerTintColor: colors.text,
+        contentStyle: { backgroundColor: colors.background },
+      }}
+    >
       <HistoryStack.Screen name="HistoryList" component={HistoryScreen} options={{ title: 'History' }} />
       <HistoryStack.Screen name="PeriodDetail" component={PeriodDetailScreen} options={{ title: 'Period' }} />
     </HistoryStack.Navigator>
@@ -34,8 +34,17 @@ function HistoryNavigator() {
 
 // Settings tab: settings -> manage categories
 function SettingsNavigator() {
+  const { colors } = useTheme();
   return (
-    <SettingsStack.Navigator screenOptions={stackOptions}>
+    <SettingsStack.Navigator
+      screenOptions={{
+        headerShadowVisible: false,
+        headerStyle: { backgroundColor: colors.background },
+        headerTitleStyle: { color: colors.text, fontWeight: '600' },
+        headerTintColor: colors.text,
+        contentStyle: { backgroundColor: colors.background },
+      }}
+    >
       <SettingsStack.Screen name="SettingsHome" component={SettingsScreen} options={{ title: 'Settings' }} />
       <SettingsStack.Screen
         name="ManageCategories"
@@ -52,11 +61,13 @@ function tabIcon(name) {
 }
 
 export default function AppNavigator() {
+  const { colors } = useTheme();
+
   return (
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: colors.accent,
+        tabBarActiveTintColor: colors.text,
         tabBarInactiveTintColor: colors.textMuted,
         tabBarStyle: { backgroundColor: colors.surface, borderTopColor: colors.border },
         tabBarLabelStyle: { fontSize: 12 },
@@ -68,4 +79,3 @@ export default function AppNavigator() {
     </Tab.Navigator>
   );
 }
-

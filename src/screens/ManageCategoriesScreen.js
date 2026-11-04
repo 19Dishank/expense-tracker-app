@@ -4,7 +4,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import CategoryEditModal from '../components/CategoryEditModal';
-import { colors, spacing, radius } from '../constants/theme';
+import { useTheme, useThemedStyles, spacing, radius } from '../constants/theme';
 import {
   getCategories,
   reorderCategories,
@@ -14,6 +14,8 @@ import {
 
 export default function ManageCategoriesScreen() {
   const db = useSQLiteContext();
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const [categories, setCategories] = useState([]);
   const [suggested, setSuggested] = useState([]);
   const [modalVisible, setModalVisible] = useState(false);
@@ -179,7 +181,8 @@ export default function ManageCategoriesScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors) =>
+  StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   list: { padding: spacing.lg, paddingBottom: 96 },
   hint: { fontSize: 13, color: colors.textMuted, marginBottom: spacing.md },
@@ -208,7 +211,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.lg,
     backgroundColor: colors.accent,
   },
-  addText: { color: '#FFFFFF', fontSize: 16, fontWeight: '600' },
+  addText: { color: colors.accentText, fontSize: 16, fontWeight: '600' },
 
   // Suggested categories section
   suggestedSection: {

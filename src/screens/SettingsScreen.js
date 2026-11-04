@@ -1,19 +1,45 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, Modal, Pressable, StyleSheet, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, Switch, Modal, Pressable, StyleSheet } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import DayPicker from '../components/DayPicker';
 import { useAppContext } from '../context/AppContext';
 import { setSetting, clearAllTransactions, resetEntireApp } from '../db/database';
 import { getPeriodForDate } from '../utils/period';
-import { confirmDelete } from '../utils/confirm';
-import { colors, spacing, radius } from '../constants/theme';
+import { useDialog } from '../utils/confirm';
+import AppDialog from '../components/AppDialog';
+import { useTheme, useThemedStyles, spacing, radius } from '../constants/theme';
+
+const THEME_OPTIONS = [
+  {
+    key: 'system',
+    label: 'System default',
+    sub: 'Follows your device settings',
+    icon: 'cellphone',
+  },
+  {
+    key: 'light',
+    label: 'Light mode',
+    sub: 'Clean, bright aesthetic',
+    icon: 'white-balance-sunny',
+  },
+  {
+    key: 'dark',
+    label: 'Dark mode',
+    sub: 'Easy on the eyes at night',
+    icon: 'moon-waning-crescent',
+  },
+];
 
 export default function SettingsScreen({ navigation }) {
   const db = useSQLiteContext();
-  const { startDay, setStartDay } = useAppContext();
+  const { startDay, setStartDay, biometricEnabled, setBiometricEnabled } = useAppContext();
+  const { themePreference, setThemePreference, colors, isDark } = useTheme();
+  const styles = useThemedStyles(createStyles);
+  const { dialogProps, showConfirm, showInfo } = useDialog();
 
   const [modalVisible, setModalVisible] = useState(false);
+  const [themeModalVisible, setThemeModalVisible] = useState(false);
   const [selectedDay, setSelectedDay] = useState(startDay);
 
   function openDayModal() {
@@ -24,37 +50,72 @@ export default function SettingsScreen({ navigation }) {
   async function handleSaveDay() {
     console.log('Changing period start day to:', selectedDay);
     await setSetting(db, 'period_start_day', selectedDay);
-    // Updating the shared value makes every screen recalculate its period
     setStartDay(selectedDay);
     setModalVisible(false);
   }
 
+  function handleSelectTheme(pref) {
+    console.log('Switching theme to:', pref);
+    setThemePreference(pref);
+    setThemeModalVisible(false);
+  }
+
+  // Toggle biometric lock on/off and persist to settings
+  async function handleToggleBiometric(value) {
+    console.log('Biometric lock toggled:', value);
+    await setSetting(db, 'biometric_lock', value ? 'true' : 'false');
+    setBiometricEnabled(value);
+    if (value) {
+      showInfo(
+        'Biometric Lock Enabled',
+        'The app will ask for fingerprint / Face ID every time it opens.',
+        { icon: 'fingerprint', iconColor: colors.accent }
+      );
+    }
+  }
+
   // TEMPORARY TEST HELPER - remove after testing
   function handleClearAll() {
-    confirmDelete(
+    showConfirm(
       'Clear all entries',
       'This permanently deletes every expense and income entry. Categories and settings are kept. For testing only.',
       async () => {
         await clearAllTransactions(db);
-        Alert.alert('Done', 'All entries were cleared.');
-      }
+        showInfo('Done', 'All entries were cleared.', { icon: 'check-circle-outline', iconColor: colors.income });
+      },
+      { icon: 'delete-sweep-outline', iconColor: colors.expense, actionLabel: 'Clear All' }
     );
   }
 
   // TEMPORARY TEST HELPER - remove after testing
   function handleResetApp() {
-    confirmDelete(
+    showConfirm(
       'Reset app completely?',
       'This deletes all entries, custom categories and settings, re-seeds the 6 default categories, and returns to the setup screen.',
       async () => {
         await resetEntireApp(db);
         setStartDay(null);
-      }
+      },
+      { icon: 'restart', iconColor: colors.expense, actionLabel: 'Reset App' }
     );
   }
 
   // Shows what the current period would be with the picked day
   const preview = getPeriodForDate(selectedDay);
+
+  const currentThemeLabel =
+    themePreference === 'system'
+      ? `System (${isDark ? 'Dark' : 'Light'})`
+      : themePreference === 'dark'
+      ? 'Dark'
+      : 'Light';
+
+  const currentThemeIcon =
+    themePreference === 'dark'
+      ? 'moon-waning-crescent'
+      : themePreference === 'light'
+      ? 'white-balance-sunny'
+      : 'theme-light-dark';
 
   return (
     <View style={styles.container}>
@@ -87,6 +148,39 @@ export default function SettingsScreen({ navigation }) {
 
         <View style={styles.divider} />
 
+        {/* Theme appearance selector */}
+        <TouchableOpacity
+          style={styles.row}
+          onPress={() => setThemeModalVisible(true)}
+          activeOpacity={0.7}
+        >
+          <MaterialCommunityIcons name={currentThemeIcon} size={24} color={colors.text} />
+          <View style={styles.rowText}>
+            <Text style={styles.rowTitle}>Theme</Text>
+            <Text style={styles.rowSub}>{currentThemeLabel}</Text>
+          </View>
+          <MaterialCommunityIcons name="chevron-right" size={24} color={colors.textMuted} />
+        </TouchableOpacity>
+
+        <View style={styles.divider} />
+
+        {/* Biometric lock */}
+        <View style={styles.row}>
+          <MaterialCommunityIcons name="fingerprint" size={24} color={colors.text} />
+          <View style={styles.rowText}>
+            <Text style={styles.rowTitle}>Biometric lock</Text>
+            <Text style={styles.rowSub}>Require fingerprint / Face ID on open</Text>
+          </View>
+          <Switch
+            value={biometricEnabled}
+            onValueChange={handleToggleBiometric}
+            trackColor={{ false: colors.border, true: colors.accent }}
+            thumbColor={'#FFFFFF'}
+          />
+        </View>
+
+        <View style={styles.divider} />
+
         {/* TEMPORARY TEST HELPER - disabled */}
         <TouchableOpacity style={[styles.row, { opacity: 0.4 }]} disabled activeOpacity={1}>
           <MaterialCommunityIcons name="delete-sweep-outline" size={24} color={colors.textMuted} />
@@ -109,6 +203,53 @@ export default function SettingsScreen({ navigation }) {
       </View>
 
       <Text style={styles.footer}>Expense Tracker. All data stays on this phone.</Text>
+
+      {/* Theme selection sheet */}
+      <Modal
+        visible={themeModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setThemeModalVisible(false)}
+      >
+        <View style={styles.overlay}>
+          <Pressable style={styles.backdrop} onPress={() => setThemeModalVisible(false)} />
+          <View style={styles.sheet}>
+            <Text style={styles.sheetTitle}>Appearance</Text>
+            {THEME_OPTIONS.map((opt, i) => {
+              const selected = themePreference === opt.key;
+              return (
+                <TouchableOpacity
+                  key={opt.key}
+                  style={[
+                    styles.themeOptionRow,
+                    selected && styles.themeOptionRowSelected,
+                    i !== THEME_OPTIONS.length - 1 && styles.themeOptionDivider,
+                  ]}
+                  onPress={() => handleSelectTheme(opt.key)}
+                  activeOpacity={0.7}
+                >
+                  <View style={[styles.themeIconCircle, selected && styles.themeIconCircleSelected]}>
+                    <MaterialCommunityIcons
+                      name={opt.icon}
+                      size={22}
+                      color={selected ? colors.accentText : colors.text}
+                    />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.themeOptionTitle, selected && styles.themeOptionTitleSelected]}>
+                      {opt.label}
+                    </Text>
+                    <Text style={styles.themeOptionSub}>{opt.sub}</Text>
+                  </View>
+                  {selected && (
+                    <MaterialCommunityIcons name="check-circle" size={22} color={colors.income} />
+                  )}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+      </Modal>
 
       {/* Start day sheet */}
       <Modal
@@ -139,46 +280,91 @@ export default function SettingsScreen({ navigation }) {
           </View>
         </View>
       </Modal>
+
+      {/* Custom in-app dialogs (replaces system Alert) */}
+      <AppDialog {...dialogProps} />
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background, padding: spacing.lg },
-  card: { backgroundColor: colors.surface, borderRadius: radius.lg, paddingHorizontal: spacing.lg },
-  row: { flexDirection: 'row', alignItems: 'center', minHeight: 64, gap: spacing.md },
-  rowText: { flex: 1 },
-  rowTitle: { fontSize: 16, fontWeight: '600', color: colors.text },
-  rowSub: { fontSize: 13, color: colors.textMuted, marginTop: 2 },
-  divider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border },
-  footer: { fontSize: 13, color: colors.textMuted, textAlign: 'center', marginTop: spacing.xl },
+const createStyles = (colors) =>
+  StyleSheet.create({
+    container: { flex: 1, backgroundColor: colors.background, padding: spacing.lg },
+    card: { backgroundColor: colors.surface, borderRadius: radius.lg, paddingHorizontal: spacing.lg },
+    row: { flexDirection: 'row', alignItems: 'center', minHeight: 64, gap: spacing.md },
+    rowText: { flex: 1 },
+    rowTitle: { fontSize: 16, fontWeight: '600', color: colors.text },
+    rowSub: { fontSize: 13, color: colors.textMuted, marginTop: 2 },
+    divider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border },
+    footer: { fontSize: 13, color: colors.textMuted, textAlign: 'center', marginTop: spacing.xl },
 
-  overlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: colors.overlay },
-  backdrop: { flex: 1 },
-  sheet: {
-    backgroundColor: colors.surface,
-    borderTopLeftRadius: radius.xl,
-    borderTopRightRadius: radius.xl,
-    padding: spacing.xl,
-  },
-  sheetTitle: { fontSize: 18, fontWeight: '700', color: colors.text, marginBottom: spacing.lg },
-  preview: { fontSize: 14, color: colors.text, marginTop: spacing.lg },
-  warning: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-    backgroundColor: colors.chip,
-    borderRadius: radius.md,
-    padding: spacing.md,
-    marginTop: spacing.md,
-  },
-  warningText: { flex: 1, fontSize: 13, color: colors.textMuted, lineHeight: 18 },
-  saveButton: {
-    backgroundColor: colors.accent,
-    borderRadius: radius.lg,
-    minHeight: 52,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: spacing.xl,
-  },
-  saveText: { color: '#FFFFFF', fontSize: 16, fontWeight: '600' },
-});
+    overlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: colors.overlay },
+    backdrop: { flex: 1 },
+    sheet: {
+      backgroundColor: colors.surface,
+      borderTopLeftRadius: radius.xl,
+      borderTopRightRadius: radius.xl,
+      padding: spacing.xl,
+    },
+    sheetTitle: { fontSize: 18, fontWeight: '700', color: colors.text, marginBottom: spacing.lg },
+    preview: { fontSize: 14, color: colors.text, marginTop: spacing.lg },
+    warning: {
+      flexDirection: 'row',
+      gap: spacing.sm,
+      backgroundColor: colors.chip,
+      borderRadius: radius.md,
+      padding: spacing.md,
+      marginTop: spacing.md,
+    },
+    warningText: { flex: 1, fontSize: 13, color: colors.textMuted, lineHeight: 18 },
+    saveButton: {
+      backgroundColor: colors.accent,
+      borderRadius: radius.lg,
+      minHeight: 52,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginTop: spacing.xl,
+    },
+    saveText: { color: colors.accentText, fontSize: 16, fontWeight: '600' },
+
+    themeOptionRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: spacing.md,
+      gap: spacing.md,
+    },
+    themeOptionRowSelected: {
+      backgroundColor: colors.chip + '66',
+      borderRadius: radius.md,
+      paddingHorizontal: spacing.sm,
+    },
+    themeOptionDivider: {
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: colors.border,
+    },
+    themeIconCircle: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      backgroundColor: colors.chip,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    themeIconCircleSelected: {
+      backgroundColor: colors.accent,
+    },
+    themeOptionTitle: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: colors.text,
+    },
+    themeOptionTitleSelected: {
+      color: colors.text,
+      fontWeight: '700',
+    },
+    themeOptionSub: {
+      fontSize: 13,
+      color: colors.textMuted,
+      marginTop: 2,
+    },
+  });

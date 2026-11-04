@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { colors, spacing } from '../constants/theme';
+import { useTheme, useThemedStyles, spacing } from '../constants/theme';
 import { formatINR } from '../utils/money';
 import { formatDisplayDate } from '../utils/period';
 
@@ -9,6 +9,8 @@ import { formatDisplayDate } from '../utils/period';
 // balance (optional) = money left right after this entry, in paise. When it is given, it is shown
 // under the amount on the same row. When it is missing (for example on the dashboard), nothing changes.
 export default function TransactionRow({ item, onPress, onLongPress, isLast, balance }) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const isExpense = item.type === 'expense';
   const hasBalance = typeof balance === 'number';
 
@@ -53,19 +55,20 @@ export default function TransactionRow({ item, onPress, onLongPress, isLast, bal
   );
 }
 
-const styles = StyleSheet.create({
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    minHeight: 60,
-    paddingVertical: spacing.sm,
-  },
-  divider: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
-  iconCircle: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
-  middle: { flex: 1, marginHorizontal: spacing.md },
-  title: { fontSize: 15, fontWeight: '600', color: colors.text },
-  subtitle: { fontSize: 12, color: colors.textMuted, marginTop: 2 },
-  right: { alignItems: 'flex-end', flexShrink: 0 },
-  amount: { fontSize: 15, fontWeight: '600' },
-  balance: { fontSize: 11, color: colors.textMuted, marginTop: 2 },
-});
+const createStyles = (colors) =>
+  StyleSheet.create({
+    row: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      minHeight: 60,
+      paddingVertical: spacing.sm,
+    },
+    divider: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
+    iconCircle: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
+    middle: { flex: 1, marginHorizontal: spacing.md },
+    title: { fontSize: 15, fontWeight: '600', color: colors.text },
+    subtitle: { fontSize: 12, color: colors.textMuted, marginTop: 2 },
+    right: { alignItems: 'flex-end', flexShrink: 0 },
+    amount: { fontSize: 15, fontWeight: '600' },
+    balance: { fontSize: 11, color: colors.textMuted, marginTop: 2 },
+  });

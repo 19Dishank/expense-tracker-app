@@ -7,7 +7,10 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSFaceIDUsageDescription": "Expense Tracker uses Face ID to keep your financial data private."
+      }
     },
     "android": {
       "package": "com.expensetracker.app",
@@ -25,7 +28,13 @@
     "plugins": [
       "expo-sqlite",
       "@react-native-community/datetimepicker",
-      "expo-font"
+      "expo-font",
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Allow Expense Tracker to use Face ID to keep your data private."
+        }
+      ]
     ]
   }
 }

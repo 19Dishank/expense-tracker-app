@@ -5,11 +5,12 @@ import { useSQLiteContext } from 'expo-sqlite';
 import DayPicker from '../components/DayPicker';
 import { setSetting } from '../db/database';
 import { getPeriodForDate } from '../utils/period';
-import { colors, spacing, radius } from '../constants/theme';
+import { useThemedStyles, spacing, radius } from '../constants/theme';
 
 // Shown only on the very first launch
 export default function SetupScreen({ onDone }) {
   const db = useSQLiteContext();
+  const styles = useThemedStyles(createStyles);
   const [selectedDay, setSelectedDay] = useState(15);
 
   // Shows the user what their current period would look like
@@ -42,20 +43,20 @@ export default function SetupScreen({ onDone }) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.surface, padding: spacing.xl },
-  title: { fontSize: 26, fontWeight: '700', color: colors.text, marginTop: spacing.xl },
-  sub: { fontSize: 15, color: colors.textMuted, marginTop: spacing.md, lineHeight: 22 },
-  pickerWrap: { marginTop: spacing.xl },
-  example: { fontSize: 14, color: colors.textMuted, marginTop: spacing.lg },
-  button: {
-    backgroundColor: colors.accent,
-    borderRadius: radius.lg,
-    minHeight: 52,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 'auto',
-  },
-  buttonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '600' },
-});
-
+const createStyles = (colors) =>
+  StyleSheet.create({
+    container: { flex: 1, backgroundColor: colors.surface, padding: spacing.xl },
+    title: { fontSize: 26, fontWeight: '700', color: colors.text, marginTop: spacing.xl },
+    sub: { fontSize: 15, color: colors.textMuted, marginTop: spacing.md, lineHeight: 22 },
+    pickerWrap: { marginTop: spacing.xl },
+    example: { fontSize: 14, color: colors.textMuted, marginTop: spacing.lg },
+    button: {
+      backgroundColor: colors.accent,
+      borderRadius: radius.lg,
+      minHeight: 52,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginTop: 'auto',
+    },
+    buttonText: { color: colors.accentText, fontSize: 16, fontWeight: '600' },
+  });

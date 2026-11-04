@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, useWindowDimensions } from 'react-native';
 import Svg, { Circle, G } from 'react-native-svg';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { colors } from '../constants/theme';
+import { useTheme, useThemedStyles } from '../constants/theme';
 import {
   CELL_HEIGHT,
   ICON_SIZE,
@@ -31,6 +31,8 @@ export default function CategoryRing({
   children,
 }) {
   const { width } = useWindowDimensions();
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
 
   const layout = buildRingLayout(width, categories.length);
   const placed = placeCategories(layout, categories);
@@ -51,7 +53,7 @@ export default function CategoryRing({
           cx={layout.cx}
           cy={layout.cy}
           r={layout.ringRadius}
-          stroke="#E9ECEF"
+          stroke={colors.border}
           strokeWidth={layout.strokeWidth}
           fill="none"
         />
@@ -130,15 +132,16 @@ export default function CategoryRing({
   );
 }
 
-const styles = StyleSheet.create({
-  hole: { alignItems: 'center', justifyContent: 'center' },
-  cell: { alignItems: 'center', paddingTop: ICON_TOP },
-  iconCircle: {
-    width: ICON_SIZE,
-    height: ICON_SIZE,
-    borderRadius: ICON_SIZE / 2,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  name: { fontSize: 12, color: colors.text, marginTop: 4, maxWidth: '92%' },
-});
+const createStyles = (colors) =>
+  StyleSheet.create({
+    hole: { alignItems: 'center', justifyContent: 'center' },
+    cell: { alignItems: 'center', paddingTop: ICON_TOP },
+    iconCircle: {
+      width: ICON_SIZE,
+      height: ICON_SIZE,
+      borderRadius: ICON_SIZE / 2,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    name: { fontSize: 12, color: colors.text, marginTop: 4, maxWidth: '92%' },
+  });

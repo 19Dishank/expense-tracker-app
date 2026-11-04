@@ -12,10 +12,11 @@ import {
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSQLiteContext } from 'expo-sqlite';
-import { colors, spacing, radius, CATEGORY_COLORS } from '../constants/theme';
+import { useTheme, useThemedStyles, spacing, radius, CATEGORY_COLORS } from '../constants/theme';
 import { ICON_LIST } from '../constants/iconList';
-import { confirmDelete } from '../utils/confirm';
+import { useDialog } from '../utils/confirm';
 import { RESERVED_CATEGORY_NAMES } from '../constants/defaultCategories';
+import AppDialog from './AppDialog';
 import {
   createOrRestoreCategory,
   findActiveCategoryByName,
@@ -26,6 +27,9 @@ import {
 // category = the category being edited, or null to create a new one
 export default function CategoryEditModal({ visible, category, onClose, onSaved }) {
   const db = useSQLiteContext();
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
+  const { dialogProps, showConfirm } = useDialog();
 
   const [name, setName] = useState('');
   const [icon, setIcon] = useState(ICON_LIST[0]);
@@ -98,14 +102,15 @@ export default function CategoryEditModal({ visible, category, onClose, onSaved 
   }
 
   function handleDelete() {
-    confirmDelete(
+    showConfirm(
       'Delete category',
       'If this category has entries, it will be hidden but old history keeps it. If it has no entries, it is removed.',
       async () => {
         const result = await archiveOrDeleteCategory(db, category.id);
         console.log('Category delete result:', result);
         onSaved();
-      }
+      },
+      { icon: 'trash-can-outline', iconColor: colors.expense, actionLabel: 'Delete' }
     );
   }
 
@@ -208,11 +213,15 @@ export default function CategoryEditModal({ visible, category, onClose, onSaved 
           </View>
         </View>
       </KeyboardAvoidingView>
+
+      {/* Custom confirmation dialog (replaces system Alert) */}
+      <AppDialog {...dialogProps} />
     </Modal>
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors) =>
+  StyleSheet.create({
   overlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: colors.overlay },
   backdrop: { flex: 1 },
   sheet: {
@@ -293,6 +302,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  saveText: { color: '#FFFFFF', fontSize: 16, fontWeight: '600' },
+  saveText: { color: colors.accentText, fontSize: 16, fontWeight: '600' },
 });
-

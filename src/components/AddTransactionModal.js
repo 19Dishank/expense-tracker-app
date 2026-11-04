@@ -13,10 +13,11 @@ import {
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSQLiteContext } from 'expo-sqlite';
-import { colors, spacing, radius } from '../constants/theme';
+import { useTheme, useThemedStyles, spacing, radius } from '../constants/theme';
 import { rupeesToPaise, paiseToRupeesString } from '../utils/money';
 import { toDateString, parseDateString, formatDisplayDate } from '../utils/period';
-import { confirmDelete } from '../utils/confirm';
+import { useDialog } from '../utils/confirm';
+import AppDialog from './AppDialog';
 import { addTransaction, updateTransaction, deleteTransaction } from '../db/database';
 
 // Standard fallback category for "Other"
@@ -39,7 +40,10 @@ export default function AddTransactionModal({
   onAddNewCategory, // opens category creator from inside this drawer
 }) {
   const db = useSQLiteContext();
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const isExpense = type === 'expense';
+  const { dialogProps, showConfirm } = useDialog();
 
   const [amount, setAmount] = useState('');
   const [date, setDate] = useState(new Date());
@@ -178,13 +182,19 @@ export default function AddTransactionModal({
   }
 
   function handleDelete() {
-    confirmDelete('Delete entry', 'This entry will be removed permanently.', async () => {
-      await deleteTransaction(db, editing.id);
-      onSaved();
-    });
+    showConfirm(
+      'Delete entry',
+      'This entry will be removed permanently.',
+      async () => {
+        await deleteTransaction(db, editing.id);
+        onSaved();
+      },
+      { icon: 'trash-can-outline', iconColor: colors.expense, actionLabel: 'Delete' }
+    );
   }
 
   return (
+    <>
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <KeyboardAvoidingView style={styles.overlay} behavior="padding">
         {/* Tapping the dark area closes the sheet */}
@@ -364,10 +374,15 @@ export default function AddTransactionModal({
         </View>
       </KeyboardAvoidingView>
     </Modal>
+
+    {/* Custom delete confirmation dialog (replaces system Alert) */}
+    <AppDialog {...dialogProps} />
+    </>
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors) =>
+  StyleSheet.create({
   overlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: colors.overlay },
   backdrop: { flex: 1 },
   sheet: {
@@ -426,7 +441,7 @@ const styles = StyleSheet.create({
   },
   sourceChipSelected: { backgroundColor: colors.accent },
   sourceChipText: { fontSize: 14, color: colors.text },
-  sourceChipTextSelected: { color: '#FFFFFF' },
+  sourceChipTextSelected: { color: colors.accentText },
   dateRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -446,7 +461,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginTop: spacing.xl,
   },
-  saveText: { color: '#FFFFFF', fontSize: 16, fontWeight: '600' },
+  saveText: { color: colors.accentText, fontSize: 16, fontWeight: '600' },
   newCatButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -462,7 +477,7 @@ const styles = StyleSheet.create({
   newCatText: {
     fontSize: 15,
     fontWeight: '600',
-    color: colors.accent,
+    color: colors.text,
   },
   deleteButton: {
     flexDirection: 'row',

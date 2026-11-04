@@ -5,13 +5,15 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import SummaryRow from '../components/SummaryRow';
 import { useAppContext } from '../context/AppContext';
-import { colors, spacing, radius } from '../constants/theme';
+import { useTheme, useThemedStyles, spacing, radius } from '../constants/theme';
 import { formatINR } from '../utils/money';
 import { getAllPeriods } from '../db/database';
 
 export default function HistoryScreen({ navigation }) {
   const db = useSQLiteContext();
   const { startDay } = useAppContext();
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const [periods, setPeriods] = useState([]);
 
   const load = useCallback(async () => {
@@ -133,7 +135,8 @@ export default function HistoryScreen({ navigation }) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors) =>
+  StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   list: { padding: spacing.lg },
   card: { backgroundColor: colors.surface, borderRadius: radius.lg, padding: spacing.lg },

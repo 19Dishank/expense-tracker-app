@@ -8,7 +8,7 @@ import {
   StyleSheet,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { colors, spacing, radius } from '../constants/theme';
+import { useTheme, useThemedStyles, spacing, radius } from '../constants/theme';
 import { formatINR } from '../utils/money';
 import { getBudgetSummary, statusColor } from '../utils/budget';
 
@@ -17,6 +17,8 @@ import { getBudgetSummary, statusColor } from '../utils/budget';
 // Expanded: shows Income and Spent side by side.
 // The card itself is NOT tappable to expand — only the chevron icon is.
 export default function BalanceCard({ income, expense, periodStart, periodEnd }) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const [expanded, setExpanded] = useState(false);
 
   // Calculate budget summary numbers using the tested budget utility
@@ -146,7 +148,8 @@ export default function BalanceCard({ income, expense, periodStart, periodEnd })
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors) =>
+  StyleSheet.create({
   card: {
     backgroundColor: colors.surface,
     borderRadius: radius.lg,

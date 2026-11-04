@@ -7,11 +7,12 @@ import DonutChart from '../components/DonutChart';
 import SummaryRow from '../components/SummaryRow';
 import TransactionRow from '../components/TransactionRow';
 import AddTransactionModal from '../components/AddTransactionModal';
-import { colors, spacing, radius } from '../constants/theme';
+import { useTheme, useThemedStyles, spacing, radius } from '../constants/theme';
 import { formatINR } from '../utils/money';
 import { computePercents } from '../utils/ringLayout';
 import { addRunningBalance } from '../utils/balance';
-import { confirmDelete } from '../utils/confirm';
+import { useDialog } from '../utils/confirm';
+import AppDialog from '../components/AppDialog';
 import {
   getPeriodTotals,
   getCategoryTotals,
@@ -24,6 +25,8 @@ import {
 export default function PeriodDetailScreen({ route, navigation }) {
   const { period } = route.params;
   const db = useSQLiteContext();
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
 
   const [totals, setTotals] = useState({ income: 0, expense: 0 });
   const [categoryTotals, setCategoryTotals] = useState([]);
@@ -31,6 +34,7 @@ export default function PeriodDetailScreen({ route, navigation }) {
   const [categories, setCategories] = useState([]);
   const [incomeSources, setIncomeSources] = useState([]);
   const [editing, setEditing] = useState(null);
+  const { dialogProps, showConfirm } = useDialog();
 
   // Show the period in the header, for example "15 Sep - 14 Oct"
   useEffect(() => {
@@ -84,10 +88,15 @@ export default function PeriodDetailScreen({ route, navigation }) {
   const entries = addRunningBalance(transactions);
 
   function handleLongPressDelete(item) {
-    confirmDelete('Delete entry', `Delete ${formatINR(item.amount)}? This cannot be undone.`, async () => {
-      await deleteTransaction(db, item.id);
-      load();
-    });
+    showConfirm(
+      'Delete entry',
+      `Delete ${formatINR(item.amount)}? This cannot be undone.`,
+      async () => {
+        await deleteTransaction(db, item.id);
+        load();
+      },
+      { icon: 'trash-can-outline', iconColor: colors.expense, actionLabel: 'Delete' }
+    );
   }
 
   function handleSaved() {
@@ -187,11 +196,15 @@ export default function PeriodDetailScreen({ route, navigation }) {
         onClose={() => setEditing(null)}
         onSaved={handleSaved}
       />
+
+      {/* Custom delete confirmation dialog */}
+      <AppDialog {...dialogProps} />
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors) =>
+  StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   content: { padding: spacing.lg, paddingBottom: spacing.xxl },
   fullLabel: { fontSize: 13, color: colors.textMuted, marginBottom: spacing.md },

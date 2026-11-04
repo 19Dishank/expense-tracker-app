@@ -10,11 +10,12 @@ import AddTransactionModal from '../components/AddTransactionModal';
 import CategoryEditModal from '../components/CategoryEditModal';
 import TransactionRow from '../components/TransactionRow';
 import { useAppContext } from '../context/AppContext';
-import { colors, spacing, radius } from '../constants/theme';
+import { useTheme, useThemedStyles, spacing, radius } from '../constants/theme';
 import { getPeriodForDate } from '../utils/period';
 import { formatINR } from '../utils/money';
 import { computePercents } from '../utils/ringLayout';
-import { confirmDelete } from '../utils/confirm';
+import { useDialog } from '../utils/confirm';
+import AppDialog from '../components/AppDialog';
 import {
   getPeriodTotals,
   getCategoryTotals,
@@ -40,6 +41,8 @@ const OTHER_VIRTUAL = {
 export default function DashboardScreen({ navigation }) {
   const db = useSQLiteContext();
   const { startDay } = useAppContext();
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
 
   const [period, setPeriod] = useState(() => getPeriodForDate(startDay));
   const [totals, setTotals] = useState({ income: 0, expense: 0 });
@@ -60,6 +63,7 @@ export default function DashboardScreen({ navigation }) {
 
   // Remembers WHICH category was long-pressed (only its id, not a copy of its numbers)
   const [highlightedId, setHighlightedId] = useState(null);
+  const { dialogProps, showConfirm } = useDialog();
 
   // Loads everything the dashboard shows
   const load = useCallback(async () => {
@@ -159,10 +163,15 @@ export default function DashboardScreen({ navigation }) {
   }
 
   function handleLongPressDelete(item) {
-    confirmDelete('Delete entry', `Delete ${formatINR(item.amount)}? This cannot be undone.`, async () => {
-      await deleteTransaction(db, item.id);
-      load();
-    });
+    showConfirm(
+      'Delete entry',
+      `Delete ${formatINR(item.amount)}? This cannot be undone.`,
+      async () => {
+        await deleteTransaction(db, item.id);
+        load();
+      },
+      { icon: 'trash-can-outline', iconColor: colors.expense, actionLabel: 'Delete' }
+    );
   }
 
   function openFullList() {
@@ -334,11 +343,15 @@ export default function DashboardScreen({ navigation }) {
         onClose={() => setCatEditVisible(false)}
         onSaved={handleCatEditSaved}
       />
+
+      {/* Custom in-app delete confirmation (replaces system Alert) */}
+      <AppDialog {...dialogProps} />
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors) =>
+  StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
 
   header: {
