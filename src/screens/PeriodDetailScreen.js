@@ -10,6 +10,7 @@ import AddTransactionModal from '../components/AddTransactionModal';
 import { colors, spacing, radius } from '../constants/theme';
 import { formatINR } from '../utils/money';
 import { computePercents } from '../utils/ringLayout';
+import { addRunningBalance } from '../utils/balance';
 import { confirmDelete } from '../utils/confirm';
 import {
   getPeriodTotals,
@@ -78,8 +79,9 @@ export default function PeriodDetailScreen({ route, navigation }) {
   const percents = computePercents(spentCategories);
 
   const donutData = spentCategories.map((c) => ({ id: c.id, value: c.total, color: c.color }));
-  const incomeEntries = transactions.filter((t) => t.type === 'income');
-  const expenseEntries = transactions.filter((t) => t.type === 'expense');
+
+  // All entries, oldest first, each one with the balance left right after it
+  const entries = addRunningBalance(transactions);
 
   function handleLongPressDelete(item) {
     confirmDelete('Delete entry', `Delete ${formatINR(item.amount)}? This cannot be undone.`, async () => {
@@ -109,6 +111,7 @@ export default function PeriodDetailScreen({ route, navigation }) {
             key={item.id}
             item={item}
             isLast={index === list.length - 1}
+            balance={item.balance}
             onPress={() => setEditing(item)}
             onLongPress={() => handleLongPressDelete(item)}
           />
@@ -166,13 +169,9 @@ export default function PeriodDetailScreen({ route, navigation }) {
           )}
         </View>
 
-        {/* Income entries */}
-        <Text style={styles.sectionTitle}>Income ({incomeEntries.length})</Text>
-        {renderEntries(incomeEntries, 'No income in this period.')}
-
-        {/* Expense entries */}
-        <Text style={styles.sectionTitle}>Expenses ({expenseEntries.length})</Text>
-        {renderEntries(expenseEntries, 'No expenses in this period.')}
+        {/* Income and expenses together, oldest first, with the running balance after each entry */}
+        <Text style={styles.sectionTitle}>Entries ({entries.length})</Text>
+        {renderEntries(entries, 'No entries in this period.')}
 
         <Text style={styles.hint}>Tap an entry to edit it. Long press to delete.</Text>
       </ScrollView>
@@ -215,4 +214,3 @@ const styles = StyleSheet.create({
   catTotal: { fontSize: 15, fontWeight: '600', color: colors.text, minWidth: 80, textAlign: 'right' },
   hint: { fontSize: 12, color: colors.textMuted, textAlign: 'center', marginTop: spacing.lg },
 });
-
