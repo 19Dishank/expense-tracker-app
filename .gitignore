@@ -39,3 +39,8 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# development guides & temporary update files
+files/
+*-Guide.md
+README-*.md

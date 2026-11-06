@@ -14,14 +14,15 @@ export const lightColors = {
   warning: '#D9A93E', // amber, shown when most of the income is spent
   chip: '#F3F4F6', // light grey for chips and inputs
   overlay: 'rgba(0,0,0,0.4)', // dark layer behind bottom sheets
+  onColor: '#FFFFFF', // text and icons placed on a green or red fill
 };
 
 export const darkColors = {
   background: '#0E0F12', // deep slate/black background
   surface: '#18191E', // elevated card/sheet surface
   border: '#262830', // subtle dark divider
-  accent: '#2E303B', // button background
-  accentText: '#FFFFFF',
+  accent: '#E5E7EB', // buttons, selected chips and icons (light on dark, so they can be seen)
+  accentText: '#0E0F12', // text on top of the accent color
   text: '#F9FAFB', // primary white/off-white text
   textMuted: '#9CA3AF', // secondary muted text
   income: '#34D399', // bright vibrant green
@@ -29,6 +30,7 @@ export const darkColors = {
   warning: '#FBBF24', // bright warm amber
   chip: '#22242C', // input & chip background
   overlay: 'rgba(0,0,0,0.7)', // backdrop
+  onColor: '#0E0F12', // dark text and icons on the bright green and red fills
 };
 
 // Default export for backward compatibility

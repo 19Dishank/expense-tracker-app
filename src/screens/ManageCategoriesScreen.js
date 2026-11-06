@@ -167,7 +167,7 @@ export default function ManageCategoriesScreen() {
       />
 
       <TouchableOpacity style={styles.addButton} onPress={openNew} activeOpacity={0.8}>
-        <MaterialCommunityIcons name="plus" size={22} color="#FFFFFF" />
+        <MaterialCommunityIcons name="plus" size={22} color={colors.accentText} />
         <Text style={styles.addText}>Add category</Text>
       </TouchableOpacity>
 

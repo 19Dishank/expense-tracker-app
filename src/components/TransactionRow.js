@@ -18,7 +18,8 @@ export default function TransactionRow({ item, onPress, onLongPress, isLast, bal
   const iconName = isExpense ? item.category_icon || 'dots-horizontal-circle-outline' : 'cash-plus';
   const iconColor = isExpense ? item.category_color || '#8C8C8C' : colors.income;
   const title = isExpense ? item.category_name || 'Other' : item.source || 'Income';
-  const subtitle = formatDisplayDate(item.date) + (item.note ? ' · ' + item.note : '');
+  const cashTag = isExpense && item.paid_in_cash ? ' · Cash' : '';
+  const subtitle = formatDisplayDate(item.date) + cashTag + (item.note ? ' · ' + item.note : '');
   const sign = isExpense ? '-' : '+';
 
   return (

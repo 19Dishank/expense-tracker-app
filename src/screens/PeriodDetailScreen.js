@@ -6,6 +6,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import DonutChart from '../components/DonutChart';
 import SummaryRow from '../components/SummaryRow';
 import TransactionRow from '../components/TransactionRow';
+import CashSection from '../components/CashSection';
 import AddTransactionModal from '../components/AddTransactionModal';
 import { useTheme, useThemedStyles, spacing, radius } from '../constants/theme';
 import { formatINR } from '../utils/money';
@@ -181,6 +182,9 @@ export default function PeriodDetailScreen({ route, navigation }) {
         {/* Income and expenses together, oldest first, with the running balance after each entry */}
         <Text style={styles.sectionTitle}>Entries ({entries.length})</Text>
         {renderEntries(entries, 'No entries in this period.')}
+
+        {/* Cash conversions & wallet breakdown for this period */}
+        <CashSection period={period} />
 
         <Text style={styles.hint}>Tap an entry to edit it. Long press to delete.</Text>
       </ScrollView>

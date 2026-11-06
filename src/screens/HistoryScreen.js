@@ -143,7 +143,7 @@ const createStyles = (colors) =>
   cardTop: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.md, minHeight: 32 },
   cardTitle: { fontSize: 15, fontWeight: '700', color: colors.text },
   badge: { backgroundColor: colors.accent, borderRadius: radius.sm, paddingHorizontal: spacing.sm, paddingVertical: 2 },
-  badgeText: { color: '#FFFFFF', fontSize: 11, fontWeight: '600' },
+  badgeText: { color: colors.accentText, fontSize: 11, fontWeight: '600' },
   empty: { fontSize: 14, color: colors.textMuted, textAlign: 'center', marginTop: spacing.xl },
 
   // Total Savings card (shown above the period list)

@@ -55,6 +55,28 @@ export async function initDatabase(db) {
     );
   }
 
+  // Safe migration: remember which expenses were paid in cash (used by the Cash card).
+  // The flag only marks an entry. It never changes any total.
+  const txColumns = await db.getAllAsync('PRAGMA table_info(transactions)');
+  if (!txColumns.some((col) => col.name === 'paid_in_cash')) {
+    console.log('Adding paid_in_cash column to transactions...');
+    await db.execAsync('ALTER TABLE transactions ADD COLUMN paid_in_cash INTEGER NOT NULL DEFAULT 0');
+  }
+
+  // Money you converted into physical cash. It lives in its OWN table so it can never
+  // be added to, or subtracted from, income, expenses or the balance.
+  await db.execAsync(`
+    CREATE TABLE IF NOT EXISTS cash_conversions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      amount INTEGER NOT NULL CHECK (amount > 0),
+      note TEXT,
+      date TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_cash_conversions_date ON cash_conversions (date);
+  `);
+
   // Add default categories only the first time
   const row = await db.getFirstAsync('SELECT COUNT(*) AS count FROM categories');
   if (row.count === 0) {
@@ -202,19 +224,19 @@ export async function getSuggestedCategories(db) {
 
 // ---------- Transaction helpers ----------
 
-// data = { type, amount, categoryId, source, note, date }
+// data = { type, amount, categoryId, source, note, date, paidInCash }
 export async function addTransaction(db, data) {
   await db.runAsync(
-    'INSERT INTO transactions (type, amount, category_id, source, note, date) VALUES (?, ?, ?, ?, ?, ?)',
-    [data.type, data.amount, data.categoryId, data.source, data.note, data.date]
+    'INSERT INTO transactions (type, amount, category_id, source, note, date, paid_in_cash) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    [data.type, data.amount, data.categoryId, data.source, data.note, data.date, data.paidInCash ? 1 : 0]
   );
   console.log('Transaction added:', data);
 }
 
 export async function updateTransaction(db, id, data) {
   await db.runAsync(
-    'UPDATE transactions SET type = ?, amount = ?, category_id = ?, source = ?, note = ?, date = ? WHERE id = ?',
-    [data.type, data.amount, data.categoryId, data.source, data.note, data.date, id]
+    'UPDATE transactions SET type = ?, amount = ?, category_id = ?, source = ?, note = ?, date = ?, paid_in_cash = ? WHERE id = ?',
+    [data.type, data.amount, data.categoryId, data.source, data.note, data.date, data.paidInCash ? 1 : 0, id]
   );
   console.log('Transaction updated:', id);
 }
@@ -323,14 +345,76 @@ export async function getAllPeriods(db, startDay) {
   return result;
 }
 
+// ---------- Cash helpers ----------
+// "Converted to cash" is money you took out as physical cash (ATM, UPI cash-out, friend).
+// It is shown separately and is NEVER added to or subtracted from income, expense or the balance.
+
+// data = { amount, date, note }
+export async function addCashConversion(db, data) {
+  await db.runAsync('INSERT INTO cash_conversions (amount, date, note) VALUES (?, ?, ?)', [
+    data.amount,
+    data.date,
+    data.note,
+  ]);
+  console.log('Cash conversion added:', data);
+}
+
+export async function updateCashConversion(db, id, data) {
+  await db.runAsync('UPDATE cash_conversions SET amount = ?, date = ?, note = ? WHERE id = ?', [
+    data.amount,
+    data.date,
+    data.note,
+    id,
+  ]);
+  console.log('Cash conversion updated:', id);
+}
+
+export async function deleteCashConversion(db, id) {
+  await db.runAsync('DELETE FROM cash_conversions WHERE id = ?', [id]);
+  console.log('Cash conversion deleted:', id);
+}
+
+// Cash conversions between two dates (inclusive), newest first
+export async function getCashConversionsForPeriod(db, start, end) {
+  return await db.getAllAsync(
+    'SELECT * FROM cash_conversions WHERE date >= ? AND date <= ? ORDER BY date DESC, id DESC',
+    [start, end]
+  );
+}
+
+// converted = cash converted inside this period
+// cashSpent = expenses marked "paid in cash" inside this period
+// inWallet  = ALL cash ever converted minus ALL cash expenses ever (cash does not reset at a new period)
+export async function getCashSummary(db, start, end) {
+  const row = await db.getFirstAsync(
+    `SELECT
+      (SELECT COALESCE(SUM(amount), 0) FROM cash_conversions WHERE date >= ? AND date <= ?) AS converted,
+      (SELECT COALESCE(SUM(amount), 0) FROM transactions
+        WHERE type = 'expense' AND paid_in_cash = 1 AND date >= ? AND date <= ?) AS cashSpent,
+      (SELECT COALESCE(SUM(amount), 0) FROM cash_conversions) AS allConverted,
+      (SELECT COALESCE(SUM(amount), 0) FROM transactions
+        WHERE type = 'expense' AND paid_in_cash = 1) AS allCashSpent`,
+    [start, end, start, end]
+  );
+  const summary = {
+    converted: row.converted,
+    cashSpent: row.cashSpent,
+    inWallet: row.allConverted - row.allCashSpent,
+  };
+  console.log('Cash summary:', summary);
+  return summary;
+}
+
 // TEMPORARY TEST HELPER - remove after testing
 // Deletes every expense and income entry. Categories and settings are kept.
 // Archived (hidden) categories are removed too, because nothing uses them anymore.
 export async function clearAllTransactions(db) {
   await db.withTransactionAsync(async () => {
     await db.runAsync('DELETE FROM transactions');
+    await db.runAsync('DELETE FROM cash_conversions');
     await db.runAsync('DELETE FROM categories WHERE is_archived = 1');
     await db.runAsync("DELETE FROM sqlite_sequence WHERE name = 'transactions'");
+    await db.runAsync("DELETE FROM sqlite_sequence WHERE name = 'cash_conversions'");
   });
   console.log('All transactions cleared (test helper)');
 }
@@ -341,9 +425,11 @@ export async function clearAllTransactions(db) {
 export async function resetEntireApp(db) {
   await db.withTransactionAsync(async () => {
     await db.runAsync('DELETE FROM transactions');
+    await db.runAsync('DELETE FROM cash_conversions');
     await db.runAsync('DELETE FROM categories');
     await db.runAsync('DELETE FROM settings');
     await db.runAsync("DELETE FROM sqlite_sequence WHERE name = 'transactions'");
+    await db.runAsync("DELETE FROM sqlite_sequence WHERE name = 'cash_conversions'");
     await db.runAsync("DELETE FROM sqlite_sequence WHERE name = 'categories'");
 
     for (let i = 0; i < DEFAULT_CATEGORIES.length; i++) {

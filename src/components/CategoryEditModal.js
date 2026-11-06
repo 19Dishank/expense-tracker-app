@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Modal,
   View,
@@ -8,6 +8,10 @@ import {
   Pressable,
   ScrollView,
   KeyboardAvoidingView,
+  Animated,
+  Dimensions,
+  Easing,
+  Platform,
   StyleSheet,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -37,6 +41,72 @@ export default function CategoryEditModal({ visible, category, onClose, onSaved 
   const [search, setSearch] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+
+  // Screen height for the bottom-sheet slide animation
+  const SCREEN_HEIGHT = Dimensions.get('window').height;
+
+  // Internal modal visibility so exit animations can play before unmounting
+  const [modalVisible, setModalVisible] = useState(visible);
+  const backdropOpacity = useRef(new Animated.Value(0)).current;
+  const sheetTranslateY = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
+
+  // Manage enter and exit animations when `visible` changes
+  useEffect(() => {
+    if (visible) {
+      setModalVisible(true);
+      backdropOpacity.setValue(0);
+      sheetTranslateY.setValue(SCREEN_HEIGHT);
+      Animated.parallel([
+        Animated.timing(backdropOpacity, {
+          toValue: 1,
+          duration: 250,
+          useNativeDriver: true,
+        }),
+        Animated.timing(sheetTranslateY, {
+          toValue: 0,
+          duration: 280,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }),
+      ]).start();
+    } else if (modalVisible) {
+      Animated.parallel([
+        Animated.timing(backdropOpacity, {
+          toValue: 0,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+        Animated.timing(sheetTranslateY, {
+          toValue: SCREEN_HEIGHT,
+          duration: 220,
+          easing: Easing.in(Easing.cubic),
+          useNativeDriver: true,
+        }),
+      ]).start(() => {
+        setModalVisible(false);
+      });
+    }
+  }, [visible]);
+
+  // Smooth dismiss animation before calling onClose
+  function handleDismiss() {
+    Animated.parallel([
+      Animated.timing(backdropOpacity, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+      Animated.timing(sheetTranslateY, {
+        toValue: SCREEN_HEIGHT,
+        duration: 220,
+        easing: Easing.in(Easing.cubic),
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      setModalVisible(false);
+      onClose();
+    });
+  }
 
   // Fill the form each time the sheet opens
   useEffect(() => {
@@ -115,18 +185,27 @@ export default function CategoryEditModal({ visible, category, onClose, onSaved 
   }
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <KeyboardAvoidingView style={styles.overlay} behavior="padding">
-        <Pressable style={styles.backdrop} onPress={onClose} />
+    <Modal visible={modalVisible} transparent animationType="none" onRequestClose={handleDismiss}>
+      <View style={styles.overlay}>
+        {/* Stationary animated backdrop: fades in/out, never slides from bottom */}
+        <Animated.View style={[styles.backdropFill, { opacity: backdropOpacity }]}>
+          <Pressable style={styles.backdropTap} onPress={handleDismiss} />
+        </Animated.View>
 
-        <View style={styles.sheet}>
-          {/* Header */}
-          <View style={styles.header}>
-            <Text style={styles.title}>{category ? 'Edit category' : 'New category'}</Text>
-            <TouchableOpacity style={styles.closeButton} onPress={onClose} accessibilityLabel="Close">
-              <MaterialCommunityIcons name="close" size={24} color={colors.text} />
-            </TouchableOpacity>
-          </View>
+        <KeyboardAvoidingView
+          style={styles.keyboardAvoid}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          pointerEvents="box-none"
+        >
+          {/* Animated bottom sheet: slides up from bottom */}
+          <Animated.View style={[styles.sheet, { transform: [{ translateY: sheetTranslateY }] }]}>
+            {/* Header */}
+            <View style={styles.header}>
+              <Text style={styles.title}>{category ? 'Edit category' : 'New category'}</Text>
+              <TouchableOpacity style={styles.closeButton} onPress={handleDismiss} accessibilityLabel="Close">
+                <MaterialCommunityIcons name="close" size={24} color={colors.text} />
+              </TouchableOpacity>
+            </View>
 
           <ScrollView
             contentContainerStyle={styles.content}
@@ -186,7 +265,7 @@ export default function CategoryEditModal({ visible, category, onClose, onSaved 
                     <MaterialCommunityIcons
                       name={iconName}
                       size={24}
-                      color={selected ? '#FFFFFF' : colors.text}
+                      color={selected ? colors.accentText : colors.text}
                     />
                   </TouchableOpacity>
                 );
@@ -211,19 +290,29 @@ export default function CategoryEditModal({ visible, category, onClose, onSaved 
               <Text style={styles.saveText}>Save</Text>
             </TouchableOpacity>
           </View>
-        </View>
+        </Animated.View>
       </KeyboardAvoidingView>
+    </View>
 
-      {/* Custom confirmation dialog (replaces system Alert) */}
-      <AppDialog {...dialogProps} />
-    </Modal>
+    {/* Custom confirmation dialog (replaces system Alert) */}
+    <AppDialog {...dialogProps} />
+  </Modal>
   );
 }
 
 const createStyles = (colors) =>
   StyleSheet.create({
-  overlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: colors.overlay },
-  backdrop: { flex: 1 },
+  overlay: { flex: 1, justifyContent: 'flex-end' },
+  backdropFill: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: colors.overlay,
+  },
+  backdropTap: { flex: 1 },
+  keyboardAvoid: { justifyContent: 'flex-end' },
   sheet: {
     backgroundColor: colors.surface,
     borderTopLeftRadius: radius.xl,
@@ -234,61 +323,61 @@ const createStyles = (colors) =>
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingLeft: spacing.xl,
-    paddingRight: spacing.sm,
-    paddingTop: spacing.sm,
+    paddingLeft: spacing.lg,
+    paddingRight: spacing.xs,
+    paddingTop: spacing.xs,
   },
-  title: { fontSize: 18, fontWeight: '700', color: colors.text },
-  closeButton: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center' },
-  content: { paddingHorizontal: spacing.xl, paddingBottom: spacing.lg },
+  title: { fontSize: 17, fontWeight: '700', color: colors.text },
+  closeButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  content: { paddingHorizontal: spacing.lg, paddingBottom: spacing.sm },
 
-  previewRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginTop: spacing.sm },
-  previewCircle: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center' },
+  previewRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: 4 },
+  previewCircle: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' },
   nameInput: {
     flex: 1,
     backgroundColor: colors.chip,
     borderRadius: radius.md,
-    paddingHorizontal: spacing.lg,
-    minHeight: 48,
-    fontSize: 16,
+    paddingHorizontal: spacing.md,
+    minHeight: 42,
+    fontSize: 15,
     color: colors.text,
   },
-  error: { color: colors.expense, fontSize: 13, marginTop: spacing.sm },
-  label: { fontSize: 13, color: colors.textMuted, marginTop: spacing.xl, marginBottom: spacing.sm },
-  wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  colorDot: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
+  error: { color: colors.expense, fontSize: 12, marginTop: 4 },
+  label: { fontSize: 12, fontWeight: '600', color: colors.textMuted, marginTop: spacing.md, marginBottom: 4 },
+  wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  colorDot: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
   searchInput: {
     backgroundColor: colors.chip,
     borderRadius: radius.md,
-    paddingHorizontal: spacing.lg,
-    minHeight: 44,
-    fontSize: 15,
+    paddingHorizontal: spacing.md,
+    minHeight: 38,
+    fontSize: 14,
     color: colors.text,
-    marginBottom: spacing.md,
+    marginBottom: spacing.xs,
   },
   iconCell: {
-    width: 48,
-    height: 48,
+    width: 44,
+    height: 44,
     borderRadius: radius.md,
     backgroundColor: colors.chip,
     alignItems: 'center',
     justifyContent: 'center',
   },
   iconCellSelected: { backgroundColor: colors.accent },
-  empty: { fontSize: 14, color: colors.textMuted, marginTop: spacing.sm },
+  empty: { fontSize: 13, color: colors.textMuted, marginTop: spacing.xs },
 
   footer: {
     flexDirection: 'row',
-    gap: spacing.md,
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.xl,
+    gap: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.lg,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.border,
   },
   deleteButton: {
-    width: 52,
-    height: 52,
+    width: 48,
+    height: 48,
     borderRadius: radius.lg,
     backgroundColor: colors.chip,
     alignItems: 'center',
@@ -298,9 +387,9 @@ const createStyles = (colors) =>
     flex: 1,
     backgroundColor: colors.accent,
     borderRadius: radius.lg,
-    minHeight: 52,
+    minHeight: 48,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  saveText: { color: colors.accentText, fontSize: 16, fontWeight: '600' },
+  saveText: { color: colors.accentText, fontSize: 15, fontWeight: '600' },
 });

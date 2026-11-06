@@ -8,6 +8,11 @@ import {
   Pressable,
   ScrollView,
   KeyboardAvoidingView,
+  Switch,
+  Animated,
+  Dimensions,
+  Easing,
+  Platform,
   StyleSheet,
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -50,12 +55,79 @@ export default function AddTransactionModal({
   const [note, setNote] = useState('');
   const [categoryId, setCategoryId] = useState(null);
   const [source, setSource] = useState('');
+  const [paidInCash, setPaidInCash] = useState(false);
   const [showPicker, setShowPicker] = useState(false);
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
 
   // Remembers if the sheet was already open, so the form is reset only when it OPENS
   const wasVisible = useRef(false);
+
+  // Screen height for the bottom-sheet slide animation
+  const SCREEN_HEIGHT = Dimensions.get('window').height;
+
+  // Internal modal visibility so exit animations can play before unmounting
+  const [modalVisible, setModalVisible] = useState(visible);
+  const backdropOpacity = useRef(new Animated.Value(0)).current;
+  const sheetTranslateY = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
+
+  // Manage enter and exit animations when `visible` changes
+  useEffect(() => {
+    if (visible) {
+      setModalVisible(true);
+      backdropOpacity.setValue(0);
+      sheetTranslateY.setValue(SCREEN_HEIGHT);
+      Animated.parallel([
+        Animated.timing(backdropOpacity, {
+          toValue: 1,
+          duration: 250,
+          useNativeDriver: true,
+        }),
+        Animated.timing(sheetTranslateY, {
+          toValue: 0,
+          duration: 280,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }),
+      ]).start();
+    } else if (modalVisible) {
+      Animated.parallel([
+        Animated.timing(backdropOpacity, {
+          toValue: 0,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+        Animated.timing(sheetTranslateY, {
+          toValue: SCREEN_HEIGHT,
+          duration: 220,
+          easing: Easing.in(Easing.cubic),
+          useNativeDriver: true,
+        }),
+      ]).start(() => {
+        setModalVisible(false);
+      });
+    }
+  }, [visible]);
+
+  // Smooth dismiss animation before calling onClose
+  function handleDismiss() {
+    Animated.parallel([
+      Animated.timing(backdropOpacity, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+      Animated.timing(sheetTranslateY, {
+        toValue: SCREEN_HEIGHT,
+        duration: 220,
+        easing: Easing.in(Easing.cubic),
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      setModalVisible(false);
+      onClose();
+    });
+  }
 
   // Every time the sheet opens, fill the fields (edit mode) or clear them (add mode)
   useEffect(() => {
@@ -76,21 +148,26 @@ export default function AddTransactionModal({
       setNote(editing.note || '');
       setCategoryId(editing.category_id ? editing.category_id : 'other');
       setSource(editing.source || '');
+      setPaidInCash(!!editing.paid_in_cash);
     } else {
       setAmount('');
       setDate(new Date());
       setNote('');
       setCategoryId(presetCategoryId || null);
       setSource('');
+      setPaidInCash(false);
     }
   }, [visible, editing, presetCategoryId]);
 
   // When the preset category changes while the sheet is open (a new category was just created),
   // only switch the selected category. Amount, note and date stay exactly as typed.
+  // Note: `visible` is intentionally omitted from deps — we only want to react to presetCategoryId
+  // changes (not to the sheet opening/closing), so we guard manually with the visible check.
   useEffect(() => {
     if (visible && presetCategoryId) {
       setCategoryId(presetCategoryId);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [presetCategoryId]);
 
   // If we edit an entry whose category was archived, keep that category in the chooser
@@ -164,6 +241,7 @@ export default function AddTransactionModal({
       source: isExpense ? null : source.trim(),
       note: note.trim() === '' ? null : note.trim(),
       date: toDateString(date),
+      paidInCash: isExpense && paidInCash,
     };
 
     setSaving(true);
@@ -195,26 +273,34 @@ export default function AddTransactionModal({
 
   return (
     <>
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <KeyboardAvoidingView style={styles.overlay} behavior="padding">
-        {/* Tapping the dark area closes the sheet */}
-        <Pressable style={styles.backdrop} onPress={onClose} />
+    <Modal visible={modalVisible} transparent animationType="none" onRequestClose={handleDismiss}>
+      <View style={styles.overlay}>
+        {/* Stationary animated backdrop: fades in/out, never slides from bottom */}
+        <Animated.View style={[styles.backdropFill, { opacity: backdropOpacity }]}>
+          <Pressable style={styles.backdropTap} onPress={handleDismiss} />
+        </Animated.View>
 
-        <View style={styles.sheet}>
-          {/* Header */}
-          <View style={styles.header}>
-            <View style={styles.headerLeft}>
-              {presetCategory && !editing && (
-                <View style={[styles.headerIcon, { backgroundColor: presetCategory.color + '1F' }]}>
-                  <MaterialCommunityIcons name={presetCategory.icon} size={20} color={presetCategory.color} />
-                </View>
-              )}
-              <Text style={styles.title}>{title}</Text>
+        <KeyboardAvoidingView
+          style={styles.keyboardAvoid}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          pointerEvents="box-none"
+        >
+          {/* Animated bottom sheet: slides up from bottom */}
+          <Animated.View style={[styles.sheet, { transform: [{ translateY: sheetTranslateY }] }]}>
+            {/* Header */}
+            <View style={styles.header}>
+              <View style={styles.headerLeft}>
+                {presetCategory && !editing && (
+                  <View style={[styles.headerIcon, { backgroundColor: presetCategory.color + '1F' }]}>
+                    <MaterialCommunityIcons name={presetCategory.icon} size={20} color={presetCategory.color} />
+                  </View>
+                )}
+                <Text style={styles.title}>{title}</Text>
+              </View>
+              <TouchableOpacity style={styles.closeButton} onPress={handleDismiss} accessibilityLabel="Close">
+                <MaterialCommunityIcons name="close" size={24} color={colors.text} />
+              </TouchableOpacity>
             </View>
-            <TouchableOpacity style={styles.closeButton} onPress={onClose} accessibilityLabel="Close">
-              <MaterialCommunityIcons name="close" size={24} color={colors.text} />
-            </TouchableOpacity>
-          </View>
 
           <ScrollView
             contentContainerStyle={styles.content}
@@ -229,9 +315,8 @@ export default function AddTransactionModal({
                 value={amount}
                 onChangeText={(text) => setAmount(text.replace(/[^0-9.]/g, ''))}
                 placeholder="0"
-                placeholderTextColor={colors.border}
+                placeholderTextColor={colors.textMuted}
                 keyboardType="decimal-pad"
-                autoFocus
                 maxLength={13}
               />
             </View>
@@ -254,7 +339,7 @@ export default function AddTransactionModal({
                         onPress={() => setCategoryId(cat.id)}
                         activeOpacity={0.7}
                       >
-                        <MaterialCommunityIcons name={cat.icon} size={18} color={cat.color} />
+                        <MaterialCommunityIcons name={cat.icon} size={16} color={cat.color} />
                         <Text style={styles.catChipText}>{cat.name}</Text>
                       </TouchableOpacity>
                     );
@@ -277,7 +362,7 @@ export default function AddTransactionModal({
                   maxLength={30}
                 />
                 {incomeSources.length > 0 && (
-                  <View style={[styles.chipWrap, { marginTop: spacing.sm }]}>
+                  <View style={[styles.chipWrap, { marginTop: spacing.xs }]}>
                     {incomeSources.map((s) => (
                       <TouchableOpacity
                         key={s}
@@ -299,16 +384,16 @@ export default function AddTransactionModal({
             {/* Date */}
             <View style={styles.section}>
               <Text style={styles.label}>Date</Text>
-              <TouchableOpacity style={styles.dateRow} onPress={() => setShowPicker(true)} activeOpacity={0.7}>
-                <MaterialCommunityIcons name="calendar-month-outline" size={20} color={colors.text} />
-                <Text style={styles.dateText}>{formatDisplayDate(toDateString(date))}</Text>
-              </TouchableOpacity>
-              <View style={[styles.chipWrap, { marginTop: spacing.sm }]}>
-                <TouchableOpacity style={styles.sourceChip} onPress={() => pickQuickDate(0)}>
-                  <Text style={styles.sourceChipText}>Today</Text>
+              <View style={styles.dateContainer}>
+                <TouchableOpacity style={styles.dateRow} onPress={() => setShowPicker(true)} activeOpacity={0.7}>
+                  <MaterialCommunityIcons name="calendar-month-outline" size={18} color={colors.text} />
+                  <Text style={styles.dateText}>{formatDisplayDate(toDateString(date))}</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.sourceChip} onPress={() => pickQuickDate(1)}>
-                  <Text style={styles.sourceChipText}>Yesterday</Text>
+                <TouchableOpacity style={styles.quickChip} onPress={() => pickQuickDate(0)} activeOpacity={0.7}>
+                  <Text style={styles.quickChipText}>Today</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.quickChip} onPress={() => pickQuickDate(1)} activeOpacity={0.7}>
+                  <Text style={styles.quickChipText}>Yesterday</Text>
                 </TouchableOpacity>
               </View>
               {showPicker && (
@@ -339,6 +424,22 @@ export default function AddTransactionModal({
                 maxLength={100}
               />
             </View>
+
+            {/* Paid in cash toggle (expenses only) */}
+            {isExpense && (
+              <View style={[styles.section, styles.cashRow]}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.cashTitle}>Paid in cash</Text>
+                  <Text style={styles.cashSub}>Counts against your cash in wallet</Text>
+                </View>
+                <Switch
+                  value={paidInCash}
+                  onValueChange={setPaidInCash}
+                  trackColor={{ false: colors.border, true: colors.income }}
+                  thumbColor={paidInCash ? colors.onColor : colors.textMuted}
+                />
+              </View>
+            )}
 
             {errors.general && <Text style={styles.error}>{errors.general}</Text>}
 
@@ -371,111 +472,135 @@ export default function AddTransactionModal({
               </TouchableOpacity>
             )}
           </ScrollView>
-        </View>
+        </Animated.View>
       </KeyboardAvoidingView>
-    </Modal>
+    </View>
+  </Modal>
 
-    {/* Custom delete confirmation dialog (replaces system Alert) */}
-    <AppDialog {...dialogProps} />
-    </>
+  {/* Custom delete confirmation dialog (replaces system Alert) */}
+  <AppDialog {...dialogProps} />
+  </>
   );
 }
 
 const createStyles = (colors) =>
   StyleSheet.create({
-  overlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: colors.overlay },
-  backdrop: { flex: 1 },
+  overlay: { flex: 1, justifyContent: 'flex-end' },
+  backdropFill: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: colors.overlay,
+  },
+  backdropTap: { flex: 1 },
+  keyboardAvoid: { justifyContent: 'flex-end' },
   sheet: {
     backgroundColor: colors.surface,
     borderTopLeftRadius: radius.xl,
     borderTopRightRadius: radius.xl,
-    maxHeight: '92%',
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingLeft: spacing.xl,
-    paddingRight: spacing.sm,
-    paddingTop: spacing.sm,
+    paddingLeft: spacing.lg,
+    paddingRight: spacing.xs,
+    paddingTop: spacing.xs,
   },
-  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  headerIcon: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
-  title: { fontSize: 18, fontWeight: '700', color: colors.text },
-  closeButton: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center' },
-  content: { paddingHorizontal: spacing.xl, paddingBottom: spacing.xl },
+  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  headerIcon: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
+  title: { fontSize: 17, fontWeight: '700', color: colors.text },
+  closeButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  content: { paddingHorizontal: spacing.lg, paddingBottom: spacing.lg },
 
-  amountRow: { flexDirection: 'row', alignItems: 'center', marginTop: spacing.sm },
-  rupee: { fontSize: 32, fontWeight: '700', color: colors.textMuted, marginRight: spacing.sm },
-  amountInput: { flex: 1, fontSize: 32, fontWeight: '700', color: colors.text, paddingVertical: spacing.sm },
+  amountRow: { flexDirection: 'row', alignItems: 'center', marginTop: 2 },
+  rupee: { fontSize: 28, fontWeight: '700', color: colors.textMuted, marginRight: 6 },
+  amountInput: { flex: 1, fontSize: 28, fontWeight: '700', color: colors.text, paddingVertical: 4 },
 
-  section: { marginTop: spacing.lg },
-  label: { fontSize: 13, color: colors.textMuted, marginBottom: spacing.sm },
+  section: { marginTop: spacing.md },
+  label: { fontSize: 12, fontWeight: '600', color: colors.textMuted, marginBottom: 4 },
   input: {
     backgroundColor: colors.chip,
     borderRadius: radius.md,
-    paddingHorizontal: spacing.lg,
-    minHeight: 48,
-    fontSize: 16,
+    paddingHorizontal: spacing.md,
+    minHeight: 42,
+    fontSize: 15,
     color: colors.text,
   },
-  chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   catChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm,
-    minHeight: 44,
-    paddingHorizontal: spacing.md,
+    gap: 6,
+    minHeight: 34,
+    paddingHorizontal: 10,
     borderRadius: radius.md,
     backgroundColor: colors.chip,
     borderWidth: 1,
     borderColor: 'transparent',
   },
-  catChipText: { fontSize: 14, color: colors.text },
+  catChipText: { fontSize: 13, color: colors.text, fontWeight: '500' },
   sourceChip: {
-    minHeight: 36,
+    minHeight: 32,
     justifyContent: 'center',
     paddingHorizontal: spacing.md,
     borderRadius: radius.md,
     backgroundColor: colors.chip,
   },
   sourceChipSelected: { backgroundColor: colors.accent },
-  sourceChipText: { fontSize: 14, color: colors.text },
+  sourceChipText: { fontSize: 13, color: colors.text },
   sourceChipTextSelected: { color: colors.accentText },
+
+  dateContainer: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   dateRow: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm,
+    gap: 6,
     backgroundColor: colors.chip,
     borderRadius: radius.md,
-    paddingHorizontal: spacing.lg,
-    minHeight: 48,
+    paddingHorizontal: spacing.md,
+    minHeight: 40,
   },
-  dateText: { fontSize: 16, color: colors.text },
-  error: { color: colors.expense, fontSize: 13, marginTop: spacing.sm },
+  dateText: { fontSize: 14, color: colors.text, fontWeight: '500' },
+  quickChip: {
+    minHeight: 40,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.sm,
+    borderRadius: radius.md,
+    backgroundColor: colors.chip,
+  },
+  quickChipText: { fontSize: 12, color: colors.textMuted, fontWeight: '500' },
+
+  cashRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginTop: spacing.md },
+  cashTitle: { fontSize: 14, fontWeight: '600', color: colors.text },
+  cashSub: { fontSize: 11, color: colors.textMuted, marginTop: 1 },
+  error: { color: colors.expense, fontSize: 12, marginTop: 4 },
   saveButton: {
     backgroundColor: colors.accent,
     borderRadius: radius.lg,
-    minHeight: 52,
+    minHeight: 48,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: spacing.xl,
+    marginTop: spacing.md,
   },
-  saveText: { color: colors.accentText, fontSize: 16, fontWeight: '600' },
+  saveText: { color: colors.accentText, fontSize: 15, fontWeight: '600' },
   newCatButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.sm,
-    minHeight: 48,
-    marginTop: spacing.md,
+    minHeight: 42,
+    marginTop: spacing.sm,
     borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.surface,
   },
   newCatText: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '600',
     color: colors.text,
   },
@@ -484,9 +609,9 @@ const createStyles = (colors) =>
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.sm,
-    minHeight: 48,
-    marginTop: spacing.sm,
+    minHeight: 42,
+    marginTop: spacing.xs,
   },
-  deleteText: { color: colors.expense, fontSize: 15, fontWeight: '600' },
+  deleteText: { color: colors.expense, fontSize: 14, fontWeight: '600' },
 });
 

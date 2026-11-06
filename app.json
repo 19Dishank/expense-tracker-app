@@ -2,10 +2,10 @@
   "expo": {
     "name": "Expense Tracker",
     "slug": "ExpenseTracker",
-    "version": "1.0.1",
+    "version": "1.1.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
@@ -14,9 +14,9 @@
     },
     "android": {
       "package": "com.expensetracker.app",
-      "versionCode": 2,
+      "versionCode": 3,
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#1C1C1E",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
@@ -33,6 +33,19 @@
         "expo-local-authentication",
         {
           "faceIDPermission": "Allow Expense Tracker to use Face ID to keep your data private."
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 288,
+          "resizeMode": "contain",
+          "backgroundColor": "#F7F8FA",
+          "dark": {
+            "image": "./assets/splash-icon-dark.png",
+            "backgroundColor": "#0E0F12"
+          }
         }
       ]
     ]

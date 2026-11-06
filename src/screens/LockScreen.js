@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -12,18 +12,24 @@ export default function LockScreen({ onUnlocked }) {
   const [checking, setChecking] = useState(true);
   const [error, setError] = useState('');
   const [supported, setSupported] = useState(true);
+  const busy = useRef(false); // true while a fingerprint prompt is open
 
   const authenticate = useCallback(async () => {
+    if (busy.current) {
+      return;
+    }
+    busy.current = true;
     setError('');
     setChecking(true);
     try {
-      const hasHardware = await LocalAuthentication.hasHardwareAsync();
-      const isEnrolled = await LocalAuthentication.isEnrolledAsync();
+      // getEnrolledLevelAsync also counts a PIN, pattern or password, not only fingerprint or face.
+      // isEnrolledAsync() is false for a phone that only has a PIN, which used to skip the lock completely.
+      const level = await LocalAuthentication.getEnrolledLevelAsync();
 
-      if (!hasHardware || !isEnrolled) {
-        // Device doesn't support biometrics or none enrolled — unlock automatically
-        // so the app is not locked out permanently
-        console.log('Biometrics not available/enrolled, auto-unlocking');
+      if (level === LocalAuthentication.SecurityLevel.NONE) {
+        // The phone has no screen lock at all, so there is nothing to check against.
+        // Let the user in so the app is not locked out permanently.
+        console.log('Phone has no screen lock, auto-unlocking');
         onUnlocked();
         return;
       }
@@ -48,6 +54,7 @@ export default function LockScreen({ onUnlocked }) {
       setError('Biometrics unavailable. Tap to try again.');
       setSupported(false);
     } finally {
+      busy.current = false;
       setChecking(false);
     }
   }, [onUnlocked]);
@@ -75,7 +82,7 @@ export default function LockScreen({ onUnlocked }) {
 
         {!checking && (
           <TouchableOpacity style={styles.button} onPress={authenticate} activeOpacity={0.8}>
-            <MaterialCommunityIcons name="fingerprint" size={20} color="#FFF" />
+            <MaterialCommunityIcons name="fingerprint" size={20} color={colors.accentText} />
             <Text style={styles.buttonText}>
               {supported ? 'Authenticate' : 'Try Again'}
             </Text>
@@ -151,4 +158,3 @@ const createStyles = (colors) =>
     color: colors.textMuted,
   },
 });
-

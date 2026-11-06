@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { View, ActivityIndicator, AppState } from 'react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { View, ActivityIndicator, AppState, useColorScheme } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { SQLiteProvider, useSQLiteContext } from 'expo-sqlite';
@@ -10,10 +10,18 @@ import { ThemeProvider, useTheme } from './src/context/ThemeContext';
 import SetupScreen from './src/screens/SetupScreen';
 import AppNavigator from './src/navigation/AppNavigator';
 import LockScreen from './src/screens/LockScreen';
+import AnimatedSplash from './src/components/AnimatedSplash';
+import * as SplashScreen from 'expo-splash-screen';
+import { lightColors, darkColors } from './src/constants/theme';
+import { LOCK_AFTER_MS } from './src/constants/security';
+
+// Keep the native splash visible until our animated splash has drawn its first frame
+SplashScreen.preventAutoHideAsync().catch(() => {});
 
 // Inner component with access to theme
 function MainAppContent({ startDay, setStartDay, biometricEnabled, setBiometricEnabled, locked, setLocked }) {
   const { colors, isDark } = useTheme();
+  const handleUnlocked = useCallback(() => setLocked(false), [setLocked]);
 
   const navTheme = isDark
     ? {
@@ -41,7 +49,7 @@ function MainAppContent({ startDay, setStartDay, biometricEnabled, setBiometricE
     <>
       <StatusBar style={isDark ? 'light' : 'dark'} />
       {locked ? (
-        <LockScreen onUnlocked={() => setLocked(false)} />
+        <LockScreen onUnlocked={handleUnlocked} />
       ) : !startDay ? (
         <SetupScreen onDone={setStartDay} />
       ) : (
@@ -65,6 +73,8 @@ function Root() {
   // Biometric lock state
   const [biometricEnabled, setBiometricEnabled] = useState(false);
   const [locked, setLocked] = useState(false);
+  const leftAppAt = useRef(null); // time the app went to the background
+  const systemScheme = useColorScheme(); // phone theme, used before the app theme is ready
 
   useEffect(() => {
     async function load() {
@@ -96,13 +106,24 @@ function Root() {
     load();
   }, [db]);
 
-  // Lock the app whenever it comes back to the foreground
+  // Lock the app when it comes back after being away for more than LOCK_AFTER_MS.
+  // A quick switch to another app (to check a payment, for example) does not ask again.
   useEffect(() => {
     if (!biometricEnabled) return;
 
     const subscription = AppState.addEventListener('change', (nextState) => {
-      if (nextState === 'active') {
-        setLocked(true);
+      if (nextState !== 'active') {
+        if (leftAppAt.current === null) {
+          leftAppAt.current = Date.now();
+        }
+        return;
+      }
+      if (leftAppAt.current !== null) {
+        const awayMs = Date.now() - leftAppAt.current;
+        leftAppAt.current = null;
+        if (awayMs >= LOCK_AFTER_MS) {
+          setLocked(true);
+        }
       }
     });
 
@@ -110,9 +131,19 @@ function Root() {
   }, [biometricEnabled]);
 
   if (loading) {
+    // The app theme is not loaded yet, so follow the phone theme for this short moment
+    const loadingColors = systemScheme === 'dark' ? darkColors : lightColors;
     return (
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-        <ActivityIndicator size="large" />
+      <View
+        style={{
+          flex: 1,
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: loadingColors.background,
+        }}
+      >
+        <StatusBar style={systemScheme === 'dark' ? 'light' : 'dark'} />
+        <ActivityIndicator size="large" color={loadingColors.text} />
       </View>
     );
   }
@@ -135,11 +166,15 @@ function Root() {
 }
 
 export default function App() {
+  const [showSplash, setShowSplash] = useState(true);
+
   return (
     <SafeAreaProvider>
       <SQLiteProvider databaseName="expense.db" onInit={initDatabase}>
         <Root />
       </SQLiteProvider>
+      {/* Animated logo on top of the app. The app loads underneath while it plays. */}
+      {showSplash && <AnimatedSplash onFinish={() => setShowSplash(false)} />}
     </SafeAreaProvider>
   );
 }

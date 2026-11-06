@@ -1,6 +1,6 @@
 import { parseDateString } from './period';
 import { formatINR } from './money';
-import { colors } from '../constants/theme';
+import { lightColors } from '../constants/theme';
 
 // Calculations for the "Remaining balance" card. All money is in paise.
 
@@ -57,8 +57,9 @@ export function getBudgetSummary(income, expense, periodStart, periodEnd, today 
   };
 }
 
-// Color for a status (used for the amount, the progress bar and the chip)
-export function statusColor(status) {
+// Color for a status (used for the amount, the progress bar and the chip).
+// Pass the colors of the CURRENT theme (from useTheme) so dark mode gets its own green, red and amber.
+export function statusColor(status, colors = lightColors) {
   if (status === 'over') {
     return colors.expense;
   }
@@ -69,4 +70,26 @@ export function statusColor(status) {
     return colors.income;
   }
   return colors.textMuted;
+}
+
+// Conditional color for the progress bar based on remaining balance:
+// High (> 50% remaining) -> Green
+// Mid (25% - 50% remaining) -> Yellow/Amber
+// Low (10% - 25% remaining) -> Orange
+// Very low (< 10% remaining or over budget) -> Red
+export function getRemainingColor(remaining, income, colors = lightColors, isDark = false) {
+  if (income <= 0) {
+    return remaining < 0 ? colors.expense : colors.textMuted;
+  }
+  const ratio = remaining / income;
+  if (ratio <= 0.10) {
+    return colors.expense;
+  }
+  if (ratio <= 0.25) {
+    return isDark ? '#FB923C' : '#EA580C';
+  }
+  if (ratio <= 0.50) {
+    return colors.warning;
+  }
+  return colors.income;
 }

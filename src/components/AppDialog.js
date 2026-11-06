@@ -160,6 +160,6 @@ const createStyles = (colors) =>
     destructiveText: {
       fontSize: 15,
       fontWeight: '600',
-      color: '#FFFFFF',
+      color: colors.onColor,
     },
   });

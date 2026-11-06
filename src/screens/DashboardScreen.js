@@ -6,6 +6,7 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import CategoryRing from '../components/CategoryRing';
 import BalanceCard from '../components/BalanceCard';
+import CashCard from '../components/CashCard';
 import AddTransactionModal from '../components/AddTransactionModal';
 import CategoryEditModal from '../components/CategoryEditModal';
 import TransactionRow from '../components/TransactionRow';
@@ -257,10 +258,15 @@ export default function DashboardScreen({ navigation }) {
             onCategoryPress={openCategory}
             onCategoryLongPress={(cat) => setHighlightedId(cat.id)}
             onHoleTap={() => setHighlightedId(null)}
+            highlightedId={highlightedId}
+            onHighlightChange={setHighlightedId}
           >
             {renderDonutCenter()}
           </CategoryRing>
         </View>
+
+        {/* Cash balance and quick convert */}
+        <CashCard period={period} refreshKey={recent} onOpenDetails={openFullList} />
 
         {/* Recent entries */}
         <View style={styles.recentHeader}>
@@ -308,7 +314,7 @@ export default function DashboardScreen({ navigation }) {
             onPress={openExpense}
             activeOpacity={0.8}
           >
-            <MaterialCommunityIcons name="minus" size={22} color="#FFFFFF" />
+            <MaterialCommunityIcons name="minus" size={22} color={colors.onColor} />
             <Text style={styles.actionText}>Expense</Text>
           </TouchableOpacity>
 
@@ -317,7 +323,7 @@ export default function DashboardScreen({ navigation }) {
             onPress={openIncome}
             activeOpacity={0.8}
           >
-            <MaterialCommunityIcons name="plus" size={22} color="#FFFFFF" />
+            <MaterialCommunityIcons name="plus" size={22} color={colors.onColor} />
             <Text style={styles.actionText}>Income</Text>
           </TouchableOpacity>
         </View>
@@ -433,5 +439,5 @@ const createStyles = (colors) =>
   },
   expenseButton: { backgroundColor: colors.expense },
   incomeButton: { backgroundColor: colors.income },
-  actionText: { color: '#FFFFFF', fontSize: 16, fontWeight: '600' },
+  actionText: { color: colors.onColor, fontSize: 16, fontWeight: '600' },
 });

@@ -2,10 +2,12 @@ import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, Switch, Modal, Pressable, StyleSheet } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import * as LocalAuthentication from 'expo-local-authentication';
 import DayPicker from '../components/DayPicker';
 import { useAppContext } from '../context/AppContext';
 import { setSetting, clearAllTransactions, resetEntireApp } from '../db/database';
 import { getPeriodForDate } from '../utils/period';
+import { LOCK_AFTER_SECONDS } from '../constants/security';
 import { useDialog } from '../utils/confirm';
 import AppDialog from '../components/AppDialog';
 import { useTheme, useThemedStyles, spacing, radius } from '../constants/theme';
@@ -63,19 +65,41 @@ export default function SettingsScreen({ navigation }) {
   // Toggle biometric lock on/off and persist to settings
   async function handleToggleBiometric(value) {
     console.log('Biometric lock toggled:', value);
+
+    if (value) {
+      // 1. The phone must have a fingerprint, face, PIN or pattern, or the lock could not protect anything
+      const level = await LocalAuthentication.getEnrolledLevelAsync();
+      if (level === LocalAuthentication.SecurityLevel.NONE) {
+        showInfo(
+          'Set a screen lock first',
+          'Your phone has no fingerprint, face, PIN or pattern set up. Add one in your phone settings, then turn this on again.',
+          { icon: 'lock-alert-outline', iconColor: colors.warning }
+        );
+        return;
+      }
+      // 2. Confirm once, so you cannot lock yourself out with a method that does not work
+      const result = await LocalAuthentication.authenticateAsync({
+        promptMessage: 'Confirm to turn on the lock',
+      });
+      if (!result.success) {
+        console.log('Biometric lock not enabled, confirmation failed:', result.error);
+        return;
+      }
+    }
+
     await setSetting(db, 'biometric_lock', value ? 'true' : 'false');
     setBiometricEnabled(value);
     if (value) {
       showInfo(
-        'Biometric Lock Enabled',
-        'The app will ask for fingerprint / Face ID every time it opens.',
+        'Lock turned on',
+        `The app asks for your fingerprint, face or phone PIN when you open it, and again after it has been in the background for more than ${LOCK_AFTER_SECONDS} seconds.`,
         { icon: 'fingerprint', iconColor: colors.accent }
       );
     }
   }
 
   // TEMPORARY TEST HELPER - remove after testing
-  function handleClearAll() {
+  function _handleClearAll() {
     showConfirm(
       'Clear all entries',
       'This permanently deletes every expense and income entry. Categories and settings are kept. For testing only.',
@@ -88,7 +112,7 @@ export default function SettingsScreen({ navigation }) {
   }
 
   // TEMPORARY TEST HELPER - remove after testing
-  function handleResetApp() {
+  function _handleResetApp() {
     showConfirm(
       'Reset app completely?',
       'This deletes all entries, custom categories and settings, re-seeds the 6 default categories, and returns to the setup screen.',
@@ -169,13 +193,13 @@ export default function SettingsScreen({ navigation }) {
           <MaterialCommunityIcons name="fingerprint" size={24} color={colors.text} />
           <View style={styles.rowText}>
             <Text style={styles.rowTitle}>Biometric lock</Text>
-            <Text style={styles.rowSub}>Require fingerprint / Face ID on open</Text>
+            <Text style={styles.rowSub}>Fingerprint, face or phone PIN when you open the app</Text>
           </View>
           <Switch
             value={biometricEnabled}
             onValueChange={handleToggleBiometric}
-            trackColor={{ false: colors.border, true: colors.accent }}
-            thumbColor={'#FFFFFF'}
+            trackColor={{ false: colors.border, true: colors.income }}
+            thumbColor={biometricEnabled ? colors.onColor : colors.textMuted}
           />
         </View>
 
