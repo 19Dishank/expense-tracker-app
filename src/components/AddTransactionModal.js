@@ -12,7 +12,6 @@ import {
   Animated,
   Dimensions,
   Easing,
-  Platform,
   StyleSheet,
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -23,6 +22,7 @@ import { rupeesToPaise, paiseToRupeesString } from '../utils/money';
 import { toDateString, parseDateString, formatDisplayDate } from '../utils/period';
 import { useDialog } from '../utils/confirm';
 import AppDialog from './AppDialog';
+import { useSheetLayout } from '../utils/useSheetLayout';
 import { addTransaction, updateTransaction, deleteTransaction } from '../db/database';
 
 // Standard fallback category for "Other"
@@ -65,6 +65,7 @@ export default function AddTransactionModal({
 
   // Screen height for the bottom-sheet slide animation
   const SCREEN_HEIGHT = Dimensions.get('window').height;
+  const { maxSheetHeight, bottomInset } = useSheetLayout();
 
   // Internal modal visibility so exit animations can play before unmounting
   const [modalVisible, setModalVisible] = useState(visible);
@@ -103,8 +104,11 @@ export default function AddTransactionModal({
           easing: Easing.in(Easing.cubic),
           useNativeDriver: true,
         }),
-      ]).start(() => {
-        setModalVisible(false);
+      ]).start(({ finished }) => {
+        // Skip when the sheet was opened again before it finished closing
+        if (finished) {
+          setModalVisible(false);
+        }
       });
     }
   }, [visible]);
@@ -123,7 +127,10 @@ export default function AddTransactionModal({
         easing: Easing.in(Easing.cubic),
         useNativeDriver: true,
       }),
-    ]).start(() => {
+    ]).start(({ finished }) => {
+      if (!finished) {
+        return;
+      }
       setModalVisible(false);
       onClose();
     });
@@ -282,11 +289,11 @@ export default function AddTransactionModal({
 
         <KeyboardAvoidingView
           style={styles.keyboardAvoid}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          behavior="padding"
           pointerEvents="box-none"
         >
           {/* Animated bottom sheet: slides up from bottom */}
-          <Animated.View style={[styles.sheet, { transform: [{ translateY: sheetTranslateY }] }]}>
+          <Animated.View style={[styles.sheet, { maxHeight: maxSheetHeight, transform: [{ translateY: sheetTranslateY }] }]}>
             {/* Header */}
             <View style={styles.header}>
               <View style={styles.headerLeft}>
@@ -303,7 +310,8 @@ export default function AddTransactionModal({
             </View>
 
           <ScrollView
-            contentContainerStyle={styles.content}
+            style={styles.scroll}
+            contentContainerStyle={[styles.content, { paddingBottom: Math.max(spacing.lg, bottomInset) }]}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >
@@ -317,6 +325,7 @@ export default function AddTransactionModal({
                 placeholder="0"
                 placeholderTextColor={colors.textMuted}
                 keyboardType="decimal-pad"
+                autoFocus
                 maxLength={13}
               />
             </View>
@@ -513,6 +522,7 @@ const createStyles = (colors) =>
   headerIcon: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
   title: { fontSize: 17, fontWeight: '700', color: colors.text },
   closeButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  scroll: { flexShrink: 1 },
   content: { paddingHorizontal: spacing.lg, paddingBottom: spacing.lg },
 
   amountRow: { flexDirection: 'row', alignItems: 'center', marginTop: 2 },

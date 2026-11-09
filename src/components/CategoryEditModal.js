@@ -11,7 +11,6 @@ import {
   Animated,
   Dimensions,
   Easing,
-  Platform,
   StyleSheet,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -21,6 +20,7 @@ import { ICON_LIST } from '../constants/iconList';
 import { useDialog } from '../utils/confirm';
 import { RESERVED_CATEGORY_NAMES } from '../constants/defaultCategories';
 import AppDialog from './AppDialog';
+import { useSheetLayout } from '../utils/useSheetLayout';
 import {
   createOrRestoreCategory,
   findActiveCategoryByName,
@@ -44,6 +44,7 @@ export default function CategoryEditModal({ visible, category, onClose, onSaved 
 
   // Screen height for the bottom-sheet slide animation
   const SCREEN_HEIGHT = Dimensions.get('window').height;
+  const { maxSheetHeight, bottomInset } = useSheetLayout();
 
   // Internal modal visibility so exit animations can play before unmounting
   const [modalVisible, setModalVisible] = useState(visible);
@@ -82,8 +83,11 @@ export default function CategoryEditModal({ visible, category, onClose, onSaved 
           easing: Easing.in(Easing.cubic),
           useNativeDriver: true,
         }),
-      ]).start(() => {
-        setModalVisible(false);
+      ]).start(({ finished }) => {
+        // Skip when the sheet was opened again before it finished closing
+        if (finished) {
+          setModalVisible(false);
+        }
       });
     }
   }, [visible]);
@@ -102,7 +106,10 @@ export default function CategoryEditModal({ visible, category, onClose, onSaved 
         easing: Easing.in(Easing.cubic),
         useNativeDriver: true,
       }),
-    ]).start(() => {
+    ]).start(({ finished }) => {
+      if (!finished) {
+        return;
+      }
       setModalVisible(false);
       onClose();
     });
@@ -194,11 +201,11 @@ export default function CategoryEditModal({ visible, category, onClose, onSaved 
 
         <KeyboardAvoidingView
           style={styles.keyboardAvoid}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          behavior="padding"
           pointerEvents="box-none"
         >
           {/* Animated bottom sheet: slides up from bottom */}
-          <Animated.View style={[styles.sheet, { transform: [{ translateY: sheetTranslateY }] }]}>
+          <Animated.View style={[styles.sheet, { maxHeight: maxSheetHeight, transform: [{ translateY: sheetTranslateY }] }]}>
             {/* Header */}
             <View style={styles.header}>
               <Text style={styles.title}>{category ? 'Edit category' : 'New category'}</Text>
@@ -208,6 +215,7 @@ export default function CategoryEditModal({ visible, category, onClose, onSaved 
             </View>
 
           <ScrollView
+            style={styles.scroll}
             contentContainerStyle={styles.content}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
@@ -275,7 +283,7 @@ export default function CategoryEditModal({ visible, category, onClose, onSaved 
           </ScrollView>
 
           {/* Fixed footer so Save is always visible */}
-          <View style={styles.footer}>
+          <View style={[styles.footer, { paddingBottom: Math.max(spacing.lg, bottomInset) }]}>
             {category && (
               <TouchableOpacity style={styles.deleteButton} onPress={handleDelete} accessibilityLabel="Delete category">
                 <MaterialCommunityIcons name="trash-can-outline" size={22} color={colors.expense} />
@@ -317,7 +325,6 @@ const createStyles = (colors) =>
     backgroundColor: colors.surface,
     borderTopLeftRadius: radius.xl,
     borderTopRightRadius: radius.xl,
-    maxHeight: '92%',
   },
   header: {
     flexDirection: 'row',
@@ -329,6 +336,7 @@ const createStyles = (colors) =>
   },
   title: { fontSize: 17, fontWeight: '700', color: colors.text },
   closeButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  scroll: { flexShrink: 1 },
   content: { paddingHorizontal: spacing.lg, paddingBottom: spacing.sm },
 
   previewRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: 4 },

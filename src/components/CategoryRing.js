@@ -72,6 +72,7 @@ export default function CategoryRing({
   const startPos = useRef({ x: 0, y: 0 });
   const hasMoved = useRef(false);
   const activeTouchId = useRef(null);
+  const holeTouch = useRef(false); // true while a finger that started in the donut hole is down
 
   function checkRingTouch(localX, localY) {
     const { layout: curLayout, slices: curSlices, rotation: curRot } = stateRef.current;
@@ -115,6 +116,8 @@ export default function CategoryRing({
       },
       onMoveShouldSetPanResponder: (evt, gestureState) => {
         if (activeTouchId.current) return true;
+        // A finger that started in the hole reports positions relative to the hole, not the ring
+        if (holeTouch.current) return false;
         return (
           (Math.abs(gestureState.dx) > 3 || Math.abs(gestureState.dy) > 3) &&
           checkRingTouch(evt.nativeEvent.locationX, evt.nativeEvent.locationY)
@@ -183,7 +186,7 @@ export default function CategoryRing({
   return (
     <View style={{ width: layout.width, height: layout.height }}>
       {/* Layer 1: ring, slices, and leader line */}
-      <Svg width={layout.width} height={layout.height} style={[ABSOLUTE, { pointerEvents: 'none' }]}>
+      <Svg width={layout.width} height={layout.height} style={ABSOLUTE} pointerEvents="none">
         {/* Fill the hole with the screen color so nothing shows through it */}
         <Circle cx={layout.cx} cy={layout.cy} r={holeRadius} fill={colors.background} />
 
@@ -198,7 +201,7 @@ export default function CategoryRing({
         />
 
         {/* Colored slices */}
-        <G rotation={rotation - 90} origin={`${layout.cx}, ${layout.cy}`}>
+        <G transform={`rotate(${rotation - 90} ${layout.cx} ${layout.cy})`}>
           {slices.map((s) => {
             const length = s.fraction * circumference;
             const isHighlighted = activeSlice && activeSlice.id === s.id;
@@ -253,6 +256,12 @@ export default function CategoryRing({
             if (onHoleTap) onHoleTap();
           }}
           activeOpacity={0.8}
+          onPressIn={() => {
+            holeTouch.current = true;
+          }}
+          onPressOut={() => {
+            holeTouch.current = false;
+          }}
           accessibilityLabel="Donut center"
         >
           {children}
