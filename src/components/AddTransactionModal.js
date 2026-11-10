@@ -258,7 +258,7 @@ export default function AddTransactionModal({
       } else {
         await addTransaction(db, data);
       }
-      onSaved();
+      onSaved(data);
     } catch (e) {
       console.log('Save failed:', e);
       setErrors({ general: 'Could not save. Please try again.' });

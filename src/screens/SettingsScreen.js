@@ -1,12 +1,13 @@
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { View, Text, TouchableOpacity, Switch, Modal, Pressable, StyleSheet } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as LocalAuthentication from 'expo-local-authentication';
-import DayPicker from '../components/DayPicker';
+import PeriodSheet from '../components/PeriodSheet';
 import { useAppContext } from '../context/AppContext';
-import { setSetting, clearAllTransactions, resetEntireApp } from '../db/database';
-import { getPeriodForDate } from '../utils/period';
+import { setSetting, clearAllTransactions, resetEntireApp, getCurrentPeriod } from '../db/database';
+import { formatDisplayDate } from '../utils/period';
 import { LOCK_AFTER_SECONDS } from '../constants/security';
 import { useDialog } from '../utils/confirm';
 import AppDialog from '../components/AppDialog';
@@ -35,26 +36,29 @@ const THEME_OPTIONS = [
 
 export default function SettingsScreen({ navigation }) {
   const db = useSQLiteContext();
-  const { startDay, setStartDay, biometricEnabled, setBiometricEnabled } = useAppContext();
+  const { setSetupDone, biometricEnabled, setBiometricEnabled } = useAppContext();
   const { themePreference, setThemePreference, colors, isDark } = useTheme();
   const styles = useThemedStyles(createStyles);
   const { dialogProps, showConfirm, showInfo } = useDialog();
 
-  const [modalVisible, setModalVisible] = useState(false);
+  const [periodSheetVisible, setPeriodSheetVisible] = useState(false);
   const [themeModalVisible, setThemeModalVisible] = useState(false);
-  const [selectedDay, setSelectedDay] = useState(startDay);
+  const [currentPeriod, setCurrentPeriod] = useState(null);
 
-  function openDayModal() {
-    setSelectedDay(startDay);
-    setModalVisible(true);
-  }
+  // Load the current period every time this screen is shown
+  const loadPeriod = useCallback(async () => {
+    try {
+      setCurrentPeriod(await getCurrentPeriod(db));
+    } catch (e) {
+      console.log('Settings period load error:', e.message);
+    }
+  }, [db]);
 
-  async function handleSaveDay() {
-    console.log('Changing period start day to:', selectedDay);
-    await setSetting(db, 'period_start_day', selectedDay);
-    setStartDay(selectedDay);
-    setModalVisible(false);
-  }
+  useFocusEffect(
+    useCallback(() => {
+      loadPeriod();
+    }, [loadPeriod])
+  );
 
   function handleSelectTheme(pref) {
     console.log('Switching theme to:', pref);
@@ -118,14 +122,11 @@ export default function SettingsScreen({ navigation }) {
       'This deletes all entries, custom categories and settings, re-seeds the 6 default categories, and returns to the setup screen.',
       async () => {
         await resetEntireApp(db);
-        setStartDay(null);
+        setSetupDone(false);
       },
       { icon: 'restart', iconColor: colors.expense, actionLabel: 'Reset App' }
     );
   }
-
-  // Shows what the current period would be with the picked day
-  const preview = getPeriodForDate(selectedDay);
 
   const currentThemeLabel =
     themePreference === 'system'
@@ -144,12 +145,16 @@ export default function SettingsScreen({ navigation }) {
   return (
     <View style={styles.container}>
       <View style={styles.card}>
-        {/* Period start day */}
-        <TouchableOpacity style={styles.row} onPress={openDayModal} activeOpacity={0.7}>
+        {/* Salary period: start a new period on the day your salary arrives */}
+        <TouchableOpacity style={styles.row} onPress={() => setPeriodSheetVisible(true)} activeOpacity={0.7}>
           <MaterialCommunityIcons name="calendar-refresh-outline" size={24} color={colors.text} />
           <View style={styles.rowText}>
-            <Text style={styles.rowTitle}>Period start day</Text>
-            <Text style={styles.rowSub}>Day {startDay} of each month</Text>
+            <Text style={styles.rowTitle}>Salary period</Text>
+            <Text style={styles.rowSub}>
+              {currentPeriod
+                ? `Since ${formatDisplayDate(currentPeriod.start)} · tap to start a new period`
+                : 'Not set'}
+            </Text>
           </View>
           <MaterialCommunityIcons name="chevron-right" size={24} color={colors.textMuted} />
         </TouchableOpacity>
@@ -275,35 +280,12 @@ export default function SettingsScreen({ navigation }) {
         </View>
       </Modal>
 
-      {/* Start day sheet */}
-      <Modal
-        visible={modalVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setModalVisible(false)}
-      >
-        <View style={styles.overlay}>
-          <Pressable style={styles.backdrop} onPress={() => setModalVisible(false)} />
-          <View style={styles.sheet}>
-            <Text style={styles.sheetTitle}>Period start day</Text>
-            <DayPicker selectedDay={selectedDay} onSelect={setSelectedDay} />
-
-            <Text style={styles.preview}>Current period would be {preview.fullLabel}.</Text>
-
-            <View style={styles.warning}>
-              <MaterialCommunityIcons name="information-outline" size={20} color={colors.textMuted} />
-              <Text style={styles.warningText}>
-                Your entries are not changed, but History will regroup them using the new start day, so
-                past period totals and savings will change.
-              </Text>
-            </View>
-
-            <TouchableOpacity style={styles.saveButton} onPress={handleSaveDay} activeOpacity={0.8}>
-              <Text style={styles.saveText}>Save</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+      {/* Salary period sheet */}
+      <PeriodSheet
+        visible={periodSheetVisible}
+        onClose={() => setPeriodSheetVisible(false)}
+        onChanged={loadPeriod}
+      />
 
       {/* Custom in-app dialogs (replaces system Alert) */}
       <AppDialog {...dialogProps} />

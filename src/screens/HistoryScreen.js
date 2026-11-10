@@ -4,27 +4,25 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import SummaryRow from '../components/SummaryRow';
-import { useAppContext } from '../context/AppContext';
 import { useTheme, useThemedStyles, spacing, radius } from '../constants/theme';
 import { formatINR } from '../utils/money';
 import { getAllPeriods } from '../db/database';
 
 export default function HistoryScreen({ navigation }) {
   const db = useSQLiteContext();
-  const { startDay } = useAppContext();
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const [periods, setPeriods] = useState([]);
 
   const load = useCallback(async () => {
     try {
-      const list = await getAllPeriods(db, startDay);
+      const list = await getAllPeriods(db);
       console.log('Periods loaded:', list.length);
       setPeriods(list);
     } catch (e) {
       console.log('History load error:', e.message);
     }
-  }, [db, startDay]);
+  }, [db]);
 
   // Reload whenever the tab is shown (entries may have changed)
   useFocusEffect(

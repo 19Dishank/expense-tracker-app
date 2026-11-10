@@ -21,7 +21,7 @@ export default function CashSection({ period }) {
   const styles = useThemedStyles(createStyles);
   const { dialogProps, showConfirm } = useDialog();
 
-  const [summary, setSummary] = useState({ converted: 0, cashSpent: 0, inWallet: 0 });
+  const [summary, setSummary] = useState({ carriedForward: 0, converted: 0, cashSpent: 0, inWallet: 0 });
   const [items, setItems] = useState([]);
   const [modal, setModal] = useState({ visible: false, editing: null });
 

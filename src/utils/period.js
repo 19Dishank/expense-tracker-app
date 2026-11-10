@@ -81,3 +81,46 @@ export function getPeriodsBetween(startDay, firstDateStr, lastDateStr) {
   return periods;
 }
 
+// ---------- Periods that start on the day your salary arrives ----------
+// Salary does not arrive on the same day every month, so a period is not "the 15th to the 14th".
+// A period starts on a day you choose and runs until the day before the NEXT start.
+// The current period has no end yet: it can be shorter or longer than a month.
+
+// The current period has no end date. This far-future date is used in database queries
+// (date <= end), so everything dated from the start onwards belongs to it.
+export const OPEN_END = '9999-12-31';
+
+// 'YYYY-MM-DD' plus a number of days (negative goes back) -> 'YYYY-MM-DD'
+export function addDays(dateStr, days) {
+  const d = parseDateString(dateStr);
+  d.setDate(d.getDate() + days);
+  return toDateString(d);
+}
+
+// Turns the stored start dates (oldest first) into period objects (oldest first).
+// Every period runs from its start date to the day before the next start date.
+// The last period is the current one: it is open (no end yet).
+export function buildPeriods(startDates) {
+  return startDates.map((startStr, i) => {
+    const start = parseDateString(startStr);
+    if (i === startDates.length - 1) {
+      return {
+        start: startStr,
+        end: OPEN_END,
+        isOpen: true,
+        label: `Since ${formatShort(start)}`,
+        fullLabel: `${formatFull(start)} - now`,
+      };
+    }
+    const endStr = addDays(startDates[i + 1], -1);
+    const end = parseDateString(endStr);
+    return {
+      start: startStr,
+      end: endStr,
+      isOpen: false,
+      label: `${formatShort(start)} - ${formatShort(end)}`,
+      fullLabel: `${formatFull(start)} - ${formatFull(end)}`,
+    };
+  });
+}
+

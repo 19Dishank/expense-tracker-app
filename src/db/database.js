@@ -1,5 +1,5 @@
 import { DEFAULT_CATEGORIES, SUGGESTED_CATEGORIES } from '../constants/defaultCategories';
-import { getPeriodForDate, getPeriodsBetween } from '../utils/period';
+import { getPeriodForDate, getPeriodsBetween, buildPeriods, toDateString, formatDisplayDate } from '../utils/period';
 
 // Runs once when the app opens. Creates tables if they don't exist yet.
 export async function initDatabase(db) {
@@ -76,6 +76,42 @@ export async function initDatabase(db) {
 
     CREATE INDEX IF NOT EXISTS idx_cash_conversions_date ON cash_conversions (date);
   `);
+
+  // Salary periods start on the day the salary arrives, so the start dates are stored.
+  // A period runs from its start date to the day before the next start date.
+  await db.execAsync(`
+    CREATE TABLE IF NOT EXISTS period_starts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      start_date TEXT NOT NULL UNIQUE
+    );
+  `);
+
+  // One-time migration: turn the old "same day every month" setting into stored start dates,
+  // so every existing period in History stays exactly as it was.
+  const startsRow = await db.getFirstAsync('SELECT COUNT(*) AS count FROM period_starts');
+  if (startsRow.count === 0) {
+    const savedDay = await db.getFirstAsync("SELECT value FROM settings WHERE key = 'period_start_day'");
+    if (savedDay) {
+      const startDay = parseInt(savedDay.value, 10);
+      const currentOld = getPeriodForDate(startDay, new Date());
+      const range = await db.getFirstAsync(
+        `SELECT MIN(d) AS minDate FROM (
+          SELECT date AS d FROM transactions
+          UNION ALL
+          SELECT date AS d FROM cash_conversions
+        )`
+      );
+      let firstDate = currentOld.start;
+      if (range && range.minDate && range.minDate < firstDate) {
+        firstDate = range.minDate;
+      }
+      const oldPeriods = getPeriodsBetween(startDay, firstDate, currentOld.start);
+      for (const p of oldPeriods) {
+        await db.runAsync('INSERT OR IGNORE INTO period_starts (start_date) VALUES (?)', [p.start]);
+      }
+      console.log('Migrated period start day to start dates:', oldPeriods.length);
+    }
+  }
 
   // Add default categories only the first time
   const row = await db.getFirstAsync('SELECT COUNT(*) AS count FROM categories');
@@ -230,6 +266,7 @@ export async function addTransaction(db, data) {
     'INSERT INTO transactions (type, amount, category_id, source, note, date, paid_in_cash) VALUES (?, ?, ?, ?, ?, ?, ?)',
     [data.type, data.amount, data.categoryId, data.source, data.note, data.date, data.paidInCash ? 1 : 0]
   );
+  await ensurePeriodCovers(db, data.date);
   console.log('Transaction added:', data);
 }
 
@@ -238,6 +275,7 @@ export async function updateTransaction(db, id, data) {
     'UPDATE transactions SET type = ?, amount = ?, category_id = ?, source = ?, note = ?, date = ?, paid_in_cash = ? WHERE id = ?',
     [data.type, data.amount, data.categoryId, data.source, data.note, data.date, data.paidInCash ? 1 : 0, id]
   );
+  await ensurePeriodCovers(db, data.date);
   console.log('Transaction updated:', id);
 }
 
@@ -309,26 +347,117 @@ export async function getCategoryTotals(db, start, end) {
 
 // ---------- Period helpers ----------
 
-// Builds the list of all periods (newest first) from the oldest entry
-// up to the current period, with income, expense and savings for each.
-export async function getAllPeriods(db, startDay) {
-  const currentPeriod = getPeriodForDate(startDay, new Date());
-  const range = await db.getFirstAsync(
-    'SELECT MIN(date) AS minDate, MAX(date) AS maxDate FROM transactions'
-  );
+// All period start dates, oldest first
+export async function getPeriodStarts(db) {
+  const rows = await db.getAllAsync('SELECT start_date FROM period_starts ORDER BY start_date ASC');
+  return rows.map((r) => r.start_date);
+}
 
-  let firstDate = currentPeriod.start;
-  let lastDate = currentPeriod.start;
-  if (range && range.minDate) {
-    if (range.minDate < firstDate) {
-      firstDate = range.minDate;
-    }
-    if (range.maxDate > lastDate) {
-      lastDate = range.maxDate;
+// All periods, oldest first. The last one is the current period and has no end yet.
+export async function getPeriodList(db) {
+  return buildPeriods(await getPeriodStarts(db));
+}
+
+// The current period (the latest one), or null before the first start date is set
+export async function getCurrentPeriod(db) {
+  const list = await getPeriodList(db);
+  return list.length === 0 ? null : list[list.length - 1];
+}
+
+// The earliest date used by any entry or cash conversion, or null when there is none
+async function getEarliestEntryDate(db) {
+  const row = await db.getFirstAsync(
+    `SELECT MIN(d) AS minDate FROM (
+      SELECT date AS d FROM transactions
+      UNION ALL
+      SELECT date AS d FROM cash_conversions
+    )`
+  );
+  return row ? row.minDate : null;
+}
+
+// Makes sure no entry falls before the first period. If an entry is dated earlier than the
+// first start date, the first period starts earlier, so the entry still belongs to a period.
+async function ensurePeriodCovers(db, dateStr) {
+  await db.runAsync(
+    `UPDATE period_starts SET start_date = ?
+    WHERE start_date = (SELECT MIN(start_date) FROM period_starts) AND ? < start_date`,
+    [dateStr, dateStr]
+  );
+}
+
+// First launch: the first period starts on the day your last salary arrived
+export async function startFirstPeriod(db, dateStr) {
+  await db.runAsync('INSERT OR IGNORE INTO period_starts (start_date) VALUES (?)', [dateStr]);
+  console.log('First period started on:', dateStr);
+}
+
+// Start a new period on the day your salary arrived. The current period ends the day before.
+// There is no minimum or maximum length: early salary and late salary both work.
+// todayStr is a parameter only so the rule can be tested.
+export async function startNewPeriod(db, dateStr, todayStr = toDateString(new Date())) {
+  const starts = await getPeriodStarts(db);
+  if (starts.length === 0) {
+    await startFirstPeriod(db, dateStr);
+    return;
+  }
+  const currentStart = starts[starts.length - 1];
+  if (dateStr > todayStr) {
+    throw new Error('The new period cannot start in the future.');
+  }
+  if (dateStr <= currentStart) {
+    throw new Error(
+      'The new period must start after the current one, which started on ' + formatDisplayDate(currentStart) + '.'
+    );
+  }
+  await db.runAsync('INSERT INTO period_starts (start_date) VALUES (?)', [dateStr]);
+  console.log('New period started on:', dateStr);
+}
+
+// Fix the start date of the current period.
+// With an earlier period before it, the date must stay after that period's start.
+// With no earlier period, entries must not end up before the start (they would belong to no period).
+export async function changeCurrentPeriodStart(db, dateStr, todayStr = toDateString(new Date())) {
+  const starts = await getPeriodStarts(db);
+  if (starts.length === 0) {
+    throw new Error('There is no period yet.');
+  }
+  const currentStart = starts[starts.length - 1];
+  const previousStart = starts.length > 1 ? starts[starts.length - 2] : null;
+  if (dateStr > todayStr) {
+    throw new Error('The period cannot start in the future.');
+  }
+  if (previousStart && dateStr <= previousStart) {
+    throw new Error(
+      'The period must start after the previous one, which started on ' + formatDisplayDate(previousStart) + '.'
+    );
+  }
+  if (!previousStart) {
+    const earliest = await getEarliestEntryDate(db);
+    if (earliest && dateStr > earliest) {
+      throw new Error(
+        'You have an entry dated ' + formatDisplayDate(earliest) + '. The first period must start on or before it.'
+      );
     }
   }
+  await db.runAsync('UPDATE period_starts SET start_date = ? WHERE start_date = ?', [dateStr, currentStart]);
+  console.log('Current period start changed to:', dateStr);
+}
 
-  const periods = getPeriodsBetween(startDay, firstDate, lastDate);
+// Undo a period that was started by mistake. The previous period becomes the current one again.
+// No entry is deleted, they simply join the previous period.
+export async function removeCurrentPeriodStart(db) {
+  const starts = await getPeriodStarts(db);
+  if (starts.length < 2) {
+    throw new Error('There is no earlier period to go back to.');
+  }
+  await db.runAsync('DELETE FROM period_starts WHERE start_date = ?', [starts[starts.length - 1]]);
+  console.log('Went back to the previous period');
+}
+
+// Builds the list of all periods (newest first) with income, expense and savings for each.
+export async function getAllPeriods(db) {
+  const periods = await getPeriodList(db);
   const result = [];
   for (const p of periods) {
     const t = await getPeriodTotals(db, p.start, p.end);
@@ -337,7 +466,7 @@ export async function getAllPeriods(db, startDay) {
       income: t.income,
       expense: t.expense,
       savings: t.income - t.expense,
-      isCurrent: p.start === currentPeriod.start,
+      isCurrent: p.isOpen,
     });
   }
   result.reverse();
@@ -356,6 +485,7 @@ export async function addCashConversion(db, data) {
     data.date,
     data.note,
   ]);
+  await ensurePeriodCovers(db, data.date);
   console.log('Cash conversion added:', data);
 }
 
@@ -366,6 +496,7 @@ export async function updateCashConversion(db, id, data) {
     data.note,
     id,
   ]);
+  await ensurePeriodCovers(db, data.date);
   console.log('Cash conversion updated:', id);
 }
 
@@ -382,24 +513,30 @@ export async function getCashConversionsForPeriod(db, start, end) {
   );
 }
 
-// converted = cash converted inside this period
-// cashSpent = expenses marked "paid in cash" inside this period
-// inWallet  = ALL cash ever converted minus ALL cash expenses ever (cash does not reset at a new period)
+// carriedForward = cash you already had when this period started
+//                  (all cash converted before it, minus all cash expenses before it)
+// converted      = cash converted inside this period
+// cashSpent      = expenses marked "paid in cash" inside this period
+// inWallet       = carriedForward + converted - cashSpent
+// Cash is physical money in your pocket, so unlike your balance it does NOT reset when a new
+// period starts. It carries forward. For a past period, inWallet is the cash left at its end.
 export async function getCashSummary(db, start, end) {
   const row = await db.getFirstAsync(
     `SELECT
       (SELECT COALESCE(SUM(amount), 0) FROM cash_conversions WHERE date >= ? AND date <= ?) AS converted,
       (SELECT COALESCE(SUM(amount), 0) FROM transactions
         WHERE type = 'expense' AND paid_in_cash = 1 AND date >= ? AND date <= ?) AS cashSpent,
-      (SELECT COALESCE(SUM(amount), 0) FROM cash_conversions) AS allConverted,
+      (SELECT COALESCE(SUM(amount), 0) FROM cash_conversions WHERE date < ?) AS convertedBefore,
       (SELECT COALESCE(SUM(amount), 0) FROM transactions
-        WHERE type = 'expense' AND paid_in_cash = 1) AS allCashSpent`,
-    [start, end, start, end]
+        WHERE type = 'expense' AND paid_in_cash = 1 AND date < ?) AS cashSpentBefore`,
+    [start, end, start, end, start, start]
   );
+  const carriedForward = row.convertedBefore - row.cashSpentBefore;
   const summary = {
+    carriedForward,
     converted: row.converted,
     cashSpent: row.cashSpent,
-    inWallet: row.allConverted - row.allCashSpent,
+    inWallet: carriedForward + row.converted - row.cashSpent,
   };
   console.log('Cash summary:', summary);
   return summary;
@@ -426,6 +563,7 @@ export async function resetEntireApp(db) {
   await db.withTransactionAsync(async () => {
     await db.runAsync('DELETE FROM transactions');
     await db.runAsync('DELETE FROM cash_conversions');
+    await db.runAsync('DELETE FROM period_starts');
     await db.runAsync('DELETE FROM categories');
     await db.runAsync('DELETE FROM settings');
     await db.runAsync("DELETE FROM sqlite_sequence WHERE name = 'transactions'");

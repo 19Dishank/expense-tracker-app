@@ -10,14 +10,15 @@ import CashCard from '../components/CashCard';
 import AddTransactionModal from '../components/AddTransactionModal';
 import CategoryEditModal from '../components/CategoryEditModal';
 import TransactionRow from '../components/TransactionRow';
-import { useAppContext } from '../context/AppContext';
+import PeriodSheet from '../components/PeriodSheet';
 import { useTheme, useThemedStyles, spacing, radius } from '../constants/theme';
-import { getPeriodForDate } from '../utils/period';
+import { OPEN_END, toDateString } from '../utils/period';
 import { formatINR } from '../utils/money';
 import { computePercents } from '../utils/ringLayout';
 import { useDialog } from '../utils/confirm';
 import AppDialog from '../components/AppDialog';
 import {
+  getCurrentPeriod,
   getPeriodTotals,
   getCategoryTotals,
   getTransactionsForPeriod,
@@ -27,6 +28,9 @@ import {
 
 // How many recent entries to show on the dashboard
 const MAX_RECENT = 8;
+
+// Shown for a moment, until the current period has been loaded from the database
+const EMPTY_PERIOD = { start: toDateString(new Date()), end: OPEN_END, isOpen: true, label: '', fullLabel: '' };
 
 // Virtual "Other" tile always appears last in the category ring.
 // isVirtual flag tells CategoryRing and openCategory how to treat it.
@@ -41,11 +45,12 @@ const OTHER_VIRTUAL = {
 
 export default function DashboardScreen({ navigation }) {
   const db = useSQLiteContext();
-  const { startDay } = useAppContext();
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
 
-  const [period, setPeriod] = useState(() => getPeriodForDate(startDay));
+  const [period, setPeriod] = useState(EMPTY_PERIOD);
+  // Sheet to start a new period. initialDate is set when it opens right after you add your salary.
+  const [periodSheet, setPeriodSheet] = useState({ visible: false, initialDate: null });
   const [totals, setTotals] = useState({ income: 0, expense: 0 });
   const [categoryTotals, setCategoryTotals] = useState([]);
   const [recent, setRecent] = useState([]);
@@ -69,7 +74,10 @@ export default function DashboardScreen({ navigation }) {
   // Loads everything the dashboard shows
   const load = useCallback(async () => {
     try {
-      const p = getPeriodForDate(startDay);
+      const p = await getCurrentPeriod(db);
+      if (!p) {
+        return;
+      }
       const t = await getPeriodTotals(db, p.start, p.end);
       const c = await getCategoryTotals(db, p.start, p.end);
       const tx = await getTransactionsForPeriod(db, p.start, p.end);
@@ -82,7 +90,7 @@ export default function DashboardScreen({ navigation }) {
     } catch (e) {
       console.log('Dashboard load error:', e.message);
     }
-  }, [db, startDay]);
+  }, [db]);
 
   // Reload every time this screen becomes visible
   useFocusEffect(
@@ -157,10 +165,20 @@ export default function DashboardScreen({ navigation }) {
     setModal((m) => ({ ...m, visible: false }));
   }
 
-  // Called by the sheet after a save or delete
-  function handleSaved() {
+  // saved = the entry that was just saved (nothing after a delete)
+  function handleSaved(saved) {
     closeModal();
     load();
+    // Salary does not arrive on a fixed day. When you add your salary dated after this period
+    // started, offer to start the new period from that date.
+    if (
+      saved &&
+      saved.type === 'income' &&
+      /salary/i.test(saved.source || '') &&
+      saved.date > period.start
+    ) {
+      setPeriodSheet({ visible: true, initialDate: saved.date });
+    }
   }
 
   function handleLongPressDelete(item) {
@@ -235,10 +253,17 @@ export default function DashboardScreen({ navigation }) {
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
-        <View>
+        <TouchableOpacity
+          onPress={() => setPeriodSheet({ visible: true, initialDate: null })}
+          activeOpacity={0.7}
+          accessibilityLabel="Salary period. Tap to start a new period"
+        >
           <Text style={styles.headerLabel}>Current period</Text>
-          <Text style={styles.headerPeriod}>{period.label}</Text>
-        </View>
+          <View style={styles.periodRow}>
+            <Text style={styles.headerPeriod}>{period.label}</Text>
+            <MaterialCommunityIcons name="chevron-down" size={22} color={colors.textMuted} />
+          </View>
+        </TouchableOpacity>
         <TouchableOpacity
           style={styles.settingsButton}
           onPress={() => navigation.navigate('Settings')}
@@ -351,6 +376,14 @@ export default function DashboardScreen({ navigation }) {
       />
 
       {/* Custom in-app delete confirmation (replaces system Alert) */}
+      {/* Start a new period, change its start date, or go back */}
+      <PeriodSheet
+        visible={periodSheet.visible}
+        initialDate={periodSheet.initialDate}
+        onClose={() => setPeriodSheet({ visible: false, initialDate: null })}
+        onChanged={load}
+      />
+
       <AppDialog {...dialogProps} />
     </SafeAreaView>
   );
@@ -370,6 +403,7 @@ const createStyles = (colors) =>
   },
   headerLabel: { fontSize: 13, color: colors.textMuted },
   headerPeriod: { fontSize: 22, fontWeight: '700', color: colors.text, marginTop: 2 },
+  periodRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   settingsButton: {
     width: 48,
     height: 48,

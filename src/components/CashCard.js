@@ -19,20 +19,26 @@ export function CashStats({ summary }) {
 
   return (
     <View>
-      <View style={styles.statsRow}>
-        <View style={styles.col}>
+      <View style={styles.statsGrid}>
+        <View style={styles.cell}>
+          <Text style={styles.colLabel}>Carried forward</Text>
+          <Text style={styles.colValue} numberOfLines={1} adjustsFontSizeToFit>
+            {formatINR(summary.carriedForward)}
+          </Text>
+        </View>
+        <View style={styles.cell}>
           <Text style={styles.colLabel}>Converted</Text>
           <Text style={styles.colValue} numberOfLines={1} adjustsFontSizeToFit>
             {formatINR(summary.converted)}
           </Text>
         </View>
-        <View style={styles.col}>
+        <View style={styles.cell}>
           <Text style={styles.colLabel}>Cash spent</Text>
           <Text style={styles.colValue} numberOfLines={1} adjustsFontSizeToFit>
             {formatINR(summary.cashSpent)}
           </Text>
         </View>
-        <View style={styles.col}>
+        <View style={styles.cell}>
           <Text style={styles.colLabel}>In wallet</Text>
           <Text
             style={[styles.colValue, negative && { color: colors.expense }]}
@@ -46,7 +52,7 @@ export function CashStats({ summary }) {
       <Text style={styles.note}>
         {negative
           ? 'You marked more cash expenses than you converted. Add the missing conversion.'
-          : '"In wallet" counts all time. The other two are for this period.'}
+          : 'Carried forward + Converted - Cash spent = In wallet. Cash keeps carrying forward when a new period starts.'}
       </Text>
     </View>
   );
@@ -61,7 +67,7 @@ export default function CashCard({ period, refreshKey, onOpenDetails }) {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
 
-  const [summary, setSummary] = useState({ converted: 0, cashSpent: 0, inWallet: 0 });
+  const [summary, setSummary] = useState({ carriedForward: 0, converted: 0, cashSpent: 0, inWallet: 0 });
   const [modalVisible, setModalVisible] = useState(false);
 
   const load = useCallback(async () => {
@@ -163,8 +169,8 @@ const createStyles = (colors) =>
       marginTop: spacing.md,
       marginBottom: spacing.md,
     },
-    statsRow: { flexDirection: 'row', gap: spacing.md },
-    col: { flex: 1 },
+    statsGrid: { flexDirection: 'row', flexWrap: 'wrap', rowGap: spacing.md },
+    cell: { width: '50%' },
     colLabel: { fontSize: 12, color: colors.textMuted },
     colValue: { fontSize: 16, fontWeight: '700', color: colors.text, marginTop: 2 },
     note: { fontSize: 12, color: colors.textMuted, marginTop: spacing.md, lineHeight: 16 },

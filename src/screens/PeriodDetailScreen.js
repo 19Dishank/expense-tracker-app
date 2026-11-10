@@ -1,5 +1,14 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, ScrollView, StyleSheet } from 'react-native';
+import {
+  View,
+  Text,
+  ScrollView,
+  StyleSheet,
+  TouchableOpacity,
+  LayoutAnimation,
+  Platform,
+  UIManager,
+} from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -23,6 +32,10 @@ import {
   deleteTransaction,
 } from '../db/database';
 
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
+
 export default function PeriodDetailScreen({ route, navigation }) {
   const { period } = route.params;
   const db = useSQLiteContext();
@@ -35,6 +48,7 @@ export default function PeriodDetailScreen({ route, navigation }) {
   const [categories, setCategories] = useState([]);
   const [incomeSources, setIncomeSources] = useState([]);
   const [editing, setEditing] = useState(null);
+  const [expandedCategories, setExpandedCategories] = useState({});
   const { dialogProps, showConfirm } = useDialog();
 
   // Show the period in the header, for example "15 Sep - 14 Oct"
@@ -105,6 +119,24 @@ export default function PeriodDetailScreen({ route, navigation }) {
     load();
   }
 
+  function toggleCategory(catId) {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setExpandedCategories((prev) => ({
+      ...prev,
+      [catId]: !prev[catId],
+    }));
+  }
+
+  function getEntriesForCategory(catId) {
+    return transactions.filter((t) => {
+      if (t.type !== 'expense') return false;
+      if (catId === 'other') {
+        return t.category_id === null || t.category_id === undefined || t.category_id === 'other';
+      }
+      return String(t.category_id) === String(catId);
+    });
+  }
+
   // Draws a list of entries inside a white card
   function renderEntries(list, emptyText) {
     if (list.length === 0) {
@@ -161,21 +193,56 @@ export default function PeriodDetailScreen({ route, navigation }) {
           {spentCategories.length === 0 ? (
             <Text style={styles.emptyText}>No expenses in this period.</Text>
           ) : (
-            spentCategories.map((c, index) => (
-              <View
-                key={c.id}
-                style={[styles.catRow, index !== spentCategories.length - 1 && styles.catDivider]}
-              >
-                <View style={[styles.catIcon, { backgroundColor: c.color + '1F' }]}>
-                  <MaterialCommunityIcons name={c.icon} size={20} color={c.color} />
+            spentCategories.map((c, index) => {
+              const isExpanded = !!expandedCategories[c.id];
+              const catEntries = isExpanded ? getEntriesForCategory(c.id) : [];
+              const isLastCat = index === spentCategories.length - 1;
+
+              return (
+                <View
+                  key={c.id}
+                  style={[styles.catAccordionItem, !isLastCat && styles.catDivider]}
+                >
+                  <TouchableOpacity
+                    style={styles.catRow}
+                    onPress={() => toggleCategory(c.id)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={[styles.catIcon, { backgroundColor: c.color + '1F' }]}>
+                      <MaterialCommunityIcons name={c.icon} size={20} color={c.color} />
+                    </View>
+                    <Text style={styles.catName} numberOfLines={1}>
+                      {c.name}
+                    </Text>
+                    <Text style={styles.catPercent}>{percents[c.id] ? percents[c.id].label : ''}</Text>
+                    <Text style={styles.catTotal}>{formatINR(c.total)}</Text>
+                    <MaterialCommunityIcons
+                      name={isExpanded ? 'chevron-up' : 'chevron-down'}
+                      size={20}
+                      color={colors.textMuted}
+                    />
+                  </TouchableOpacity>
+
+                  {isExpanded && (
+                    <View style={styles.catEntriesContainer}>
+                      {catEntries.length === 0 ? (
+                        <Text style={styles.catEmptyText}>No entries in this category.</Text>
+                      ) : (
+                        catEntries.map((item, idx) => (
+                          <TransactionRow
+                            key={item.id}
+                            item={item}
+                            isLast={idx === catEntries.length - 1}
+                            onPress={() => setEditing(item)}
+                            onLongPress={() => handleLongPressDelete(item)}
+                          />
+                        ))
+                      )}
+                    </View>
+                  )}
                 </View>
-                <Text style={styles.catName} numberOfLines={1}>
-                  {c.name}
-                </Text>
-                <Text style={styles.catPercent}>{percents[c.id] ? percents[c.id].label : ''}</Text>
-                <Text style={styles.catTotal}>{formatINR(c.total)}</Text>
-              </View>
-            ))
+              );
+            })
           )}
         </View>
 
@@ -223,11 +290,25 @@ const createStyles = (colors) =>
   donutAmount: { fontSize: 20, fontWeight: '700', color: colors.text },
   sectionTitle: { fontSize: 16, fontWeight: '700', color: colors.text, marginTop: spacing.xl, marginBottom: spacing.sm },
   emptyText: { fontSize: 14, color: colors.textMuted, textAlign: 'center', paddingVertical: spacing.md },
+  catAccordionItem: { overflow: 'hidden' },
   catRow: { flexDirection: 'row', alignItems: 'center', minHeight: 52, gap: spacing.md },
   catDivider: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
   catIcon: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
   catName: { flex: 1, fontSize: 15, color: colors.text },
   catPercent: { fontSize: 13, color: colors.textMuted },
-  catTotal: { fontSize: 15, fontWeight: '600', color: colors.text, minWidth: 80, textAlign: 'right' },
+  catTotal: { fontSize: 15, fontWeight: '600', color: colors.text, minWidth: 70, textAlign: 'right' },
+  catEntriesContainer: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+    paddingLeft: spacing.sm,
+    paddingBottom: spacing.xs,
+  },
+  catEmptyText: {
+    fontSize: 13,
+    color: colors.textMuted,
+    fontStyle: 'italic',
+    textAlign: 'center',
+    paddingVertical: spacing.md,
+  },
   hint: { fontSize: 12, color: colors.textMuted, textAlign: 'center', marginTop: spacing.lg },
 });

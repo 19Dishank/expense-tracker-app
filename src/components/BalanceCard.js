@@ -56,7 +56,10 @@ export default function BalanceCard({ income, expense, periodStart, periodEnd })
 
   // Days left wording
   let daysText = `${summary.daysLeft} days left`;
-  if (summary.daysLeft === 1) {
+  if (summary.daysLeft === null) {
+    // The current period has no end date, so show which day of it today is
+    daysText = `Day ${summary.elapsedDays}`;
+  } else if (summary.daysLeft === 1) {
     daysText = '1 day left';
   } else if (summary.daysLeft === 0) {
     daysText = 'Period ended';

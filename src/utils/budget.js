@@ -1,4 +1,4 @@
-import { parseDateString } from './period';
+import { parseDateString, OPEN_END } from './period';
 import { formatINR } from './money';
 import { lightColors } from '../constants/theme';
 
@@ -14,8 +14,16 @@ function startOfDay(d) {
 // elapsedDays = days passed INCLUDING today (at least 1)
 export function getPeriodDays(periodStart, periodEnd, today = new Date()) {
   const start = parseDateString(periodStart);
-  const end = parseDateString(periodEnd);
   const now = startOfDay(today);
+
+  // The current period has no end date (it ends when your next salary arrives),
+  // so there is no "days left". Only the day number of the period is known.
+  if (!periodEnd || periodEnd === OPEN_END) {
+    const elapsed = Math.max(Math.round((now - start) / DAY_MS) + 1, 1);
+    return { totalDays: null, daysLeft: null, elapsedDays: elapsed };
+  }
+
+  const end = parseDateString(periodEnd);
   const totalDays = Math.round((end - start) / DAY_MS) + 1;
   const daysLeft = Math.min(Math.max(Math.round((end - now) / DAY_MS) + 1, 0), totalDays);
   const elapsedDays = Math.min(totalDays, totalDays - daysLeft + 1);

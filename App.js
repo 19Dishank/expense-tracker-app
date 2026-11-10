@@ -4,7 +4,7 @@ import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { SQLiteProvider, useSQLiteContext } from 'expo-sqlite';
 import { NavigationContainer, DefaultTheme, DarkTheme } from '@react-navigation/native';
-import { initDatabase, getSetting, setSetting } from './src/db/database';
+import { initDatabase, getSetting, setSetting, getPeriodStarts } from './src/db/database';
 import { AppContext } from './src/context/AppContext';
 import { ThemeProvider, useTheme } from './src/context/ThemeContext';
 import SetupScreen from './src/screens/SetupScreen';
@@ -19,7 +19,7 @@ import { LOCK_AFTER_MS } from './src/constants/security';
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
 // Inner component with access to theme
-function MainAppContent({ startDay, setStartDay, biometricEnabled, setBiometricEnabled, locked, setLocked }) {
+function MainAppContent({ setupDone, setSetupDone, biometricEnabled, setBiometricEnabled, locked, setLocked }) {
   const { colors, isDark } = useTheme();
   const handleUnlocked = useCallback(() => setLocked(false), [setLocked]);
 
@@ -50,10 +50,10 @@ function MainAppContent({ startDay, setStartDay, biometricEnabled, setBiometricE
       <StatusBar style={isDark ? 'light' : 'dark'} />
       {locked ? (
         <LockScreen onUnlocked={handleUnlocked} />
-      ) : !startDay ? (
-        <SetupScreen onDone={setStartDay} />
+      ) : !setupDone ? (
+        <SetupScreen onDone={() => setSetupDone(true)} />
       ) : (
-        <AppContext.Provider value={{ startDay, setStartDay, biometricEnabled, setBiometricEnabled }}>
+        <AppContext.Provider value={{ setupDone, setSetupDone, biometricEnabled, setBiometricEnabled }}>
           <NavigationContainer theme={navTheme}>
             <AppNavigator />
           </NavigationContainer>
@@ -67,7 +67,7 @@ function MainAppContent({ startDay, setStartDay, biometricEnabled, setBiometricE
 function Root() {
   const db = useSQLiteContext();
   const [loading, setLoading] = useState(true);
-  const [startDay, setStartDay] = useState(null);
+  const [setupDone, setSetupDone] = useState(false);
   const [themePreference, setThemePreference] = useState('system');
 
   // Biometric lock state
@@ -79,10 +79,8 @@ function Root() {
   useEffect(() => {
     async function load() {
       try {
-        const saved = await getSetting(db, 'period_start_day');
-        if (saved) {
-          setStartDay(parseInt(saved, 10));
-        }
+        const starts = await getPeriodStarts(db);
+        setSetupDone(starts.length > 0);
 
         // Load theme preference ('system' | 'light' | 'dark')
         const savedTheme = await getSetting(db, 'theme_preference');
@@ -154,8 +152,8 @@ function Root() {
       onSaveTheme={(pref) => setSetting(db, 'theme_preference', pref)}
     >
       <MainAppContent
-        startDay={startDay}
-        setStartDay={setStartDay}
+        setupDone={setupDone}
+        setSetupDone={setSetupDone}
         biometricEnabled={biometricEnabled}
         setBiometricEnabled={setBiometricEnabled}
         locked={locked}
