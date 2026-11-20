@@ -86,6 +86,19 @@ export async function initDatabase(db) {
     );
   `);
 
+  // Quick expenses — recurring expense templates the user can tap once to log immediately.
+  // amount is in paise. category_id may reference a category or be NULL (Other).
+  await db.execAsync(`
+    CREATE TABLE IF NOT EXISTS quick_expenses (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      label TEXT NOT NULL,
+      amount INTEGER NOT NULL CHECK (amount > 0),
+      category_id INTEGER,
+      note TEXT,
+      sort_order INTEGER NOT NULL DEFAULT 0
+    );
+  `);
+
   // One-time migration: turn the old "same day every month" setting into stored start dates,
   // so every existing period in History stays exactly as it was.
   const startsRow = await db.getFirstAsync('SELECT COUNT(*) AS count FROM period_starts');
@@ -134,6 +147,44 @@ export async function initDatabase(db) {
 export async function getSetting(db, key) {
   const row = await db.getFirstAsync('SELECT value FROM settings WHERE key = ?', [key]);
   return row ? row.value : null;
+}
+
+// ---------- Quick expense helpers ----------
+
+// All quick expenses in display order, joined with their category name/icon/color
+export async function getQuickExpenses(db) {
+  const rows = await db.getAllAsync(
+    `SELECT q.*, c.name AS category_name, c.icon AS category_icon, c.color AS category_color
+    FROM quick_expenses q
+    LEFT JOIN categories c ON c.id = q.category_id
+    ORDER BY q.sort_order ASC, q.id ASC`
+  );
+  console.log('Quick expenses loaded:', rows.length);
+  return rows;
+}
+
+// data = { label, amount (paise), categoryId (or null), note }
+export async function addQuickExpense(db, data) {
+  const row = await db.getFirstAsync('SELECT COALESCE(MAX(sort_order), -1) + 1 AS next FROM quick_expenses');
+  await db.runAsync(
+    'INSERT INTO quick_expenses (label, amount, category_id, note, sort_order) VALUES (?, ?, ?, ?, ?)',
+    [data.label, data.amount, data.categoryId || null, data.note || null, row.next]
+  );
+  console.log('Quick expense added:', data.label);
+}
+
+// data = { label, amount (paise), categoryId (or null), note }
+export async function updateQuickExpense(db, id, data) {
+  await db.runAsync(
+    'UPDATE quick_expenses SET label = ?, amount = ?, category_id = ?, note = ? WHERE id = ?',
+    [data.label, data.amount, data.categoryId || null, data.note || null, id]
+  );
+  console.log('Quick expense updated:', id);
+}
+
+export async function deleteQuickExpense(db, id) {
+  await db.runAsync('DELETE FROM quick_expenses WHERE id = ?', [id]);
+  console.log('Quick expense deleted:', id);
 }
 
 export async function setSetting(db, key, value) {

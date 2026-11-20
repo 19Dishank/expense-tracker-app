@@ -8,6 +8,7 @@ import HistoryScreen from '../screens/HistoryScreen';
 import PeriodDetailScreen from '../screens/PeriodDetailScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import ManageCategoriesScreen from '../screens/ManageCategoriesScreen';
+import ManageQuickExpensesScreen from '../screens/ManageQuickExpensesScreen';
 
 const Tab = createBottomTabNavigator();
 const HistoryStack = createNativeStackNavigator();
@@ -50,6 +51,11 @@ function SettingsNavigator() {
         name="ManageCategories"
         component={ManageCategoriesScreen}
         options={{ title: 'Categories' }}
+      />
+      <SettingsStack.Screen
+        name="ManageQuickExpenses"
+        component={ManageQuickExpensesScreen}
+        options={{ title: 'Quick Expenses' }}
       />
     </SettingsStack.Navigator>
   );

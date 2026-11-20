@@ -24,6 +24,8 @@ import {
   getTransactionsForPeriod,
   getIncomeSources,
   deleteTransaction,
+  getQuickExpenses,
+  addTransaction,
 } from '../db/database';
 
 // How many recent entries to show on the dashboard
@@ -55,6 +57,10 @@ export default function DashboardScreen({ navigation }) {
   const [categoryTotals, setCategoryTotals] = useState([]);
   const [recent, setRecent] = useState([]);
   const [incomeSources, setIncomeSources] = useState([]);
+  // Quick expense templates shown as chips above recent entries
+  const [quickExpenses, setQuickExpenses] = useState([]);
+  // Which quick expense is currently being saved (to show a brief highlight)
+  const [savingQuickId, setSavingQuickId] = useState(null);
 
   // Controls the add/edit sheet
   const [modal, setModal] = useState({
@@ -78,15 +84,19 @@ export default function DashboardScreen({ navigation }) {
       if (!p) {
         return;
       }
-      const t = await getPeriodTotals(db, p.start, p.end);
-      const c = await getCategoryTotals(db, p.start, p.end);
-      const tx = await getTransactionsForPeriod(db, p.start, p.end);
-      const s = await getIncomeSources(db);
+      const [t, c, tx, s, qs] = await Promise.all([
+        getPeriodTotals(db, p.start, p.end),
+        getCategoryTotals(db, p.start, p.end),
+        getTransactionsForPeriod(db, p.start, p.end),
+        getIncomeSources(db),
+        getQuickExpenses(db),
+      ]);
       setPeriod(p);
       setTotals(t);
       setCategoryTotals(c);
       setRecent(tx);
       setIncomeSources(s);
+      setQuickExpenses(qs);
     } catch (e) {
       console.log('Dashboard load error:', e.message);
     }
@@ -217,6 +227,28 @@ export default function DashboardScreen({ navigation }) {
 
   const shownRecent = recent.slice(0, MAX_RECENT);
 
+  // One-tap logging of a quick expense template using today's date
+  async function handleQuickExpense(qe) {
+    if (savingQuickId !== null) return; // already saving one
+    setSavingQuickId(qe.id);
+    try {
+      await addTransaction(db, {
+        type: 'expense',
+        amount: qe.amount,
+        categoryId: qe.category_id || null,
+        source: null,
+        note: qe.note || null,
+        date: toDateString(new Date()),
+        paidInCash: false,
+      });
+      await load();
+    } catch (e) {
+      console.log('Quick expense log error:', e.message);
+    } finally {
+      setSavingQuickId(null);
+    }
+  }
+
   // The content to show inside the donut hole — changes when a category is long-pressed
   function renderDonutCenter() {
     if (highlightedCat) {
@@ -292,6 +324,44 @@ export default function DashboardScreen({ navigation }) {
 
         {/* Cash balance and quick convert */}
         <CashCard period={period} refreshKey={recent} onOpenDetails={openFullList} />
+
+        {/* Quick expense chip rail — tap once to log a recurring expense immediately */}
+        {quickExpenses.length > 0 && (
+          <View style={styles.quickSection}>
+            <Text style={styles.quickTitle}>Quick add</Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.quickRail}
+            >
+              {quickExpenses.map((qe) => {
+                const isSaving = savingQuickId === qe.id;
+                const iconColor = qe.category_color || '#8C8C8C';
+                return (
+                  <TouchableOpacity
+                    key={qe.id}
+                    style={[styles.quickChip, isSaving && { opacity: 0.5 }]}
+                    onPress={() => handleQuickExpense(qe)}
+                    disabled={savingQuickId !== null}
+                    activeOpacity={0.75}
+                  >
+                    <View style={[styles.quickChipIcon, { backgroundColor: iconColor + '22' }]}>
+                      <MaterialCommunityIcons
+                        name={qe.category_icon || 'dots-horizontal-circle-outline'}
+                        size={16}
+                        color={iconColor}
+                      />
+                    </View>
+                    <View>
+                      <Text style={styles.quickChipLabel} numberOfLines={1}>{qe.label}</Text>
+                      <Text style={styles.quickChipAmount}>{formatINR(qe.amount)}</Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        )}
 
         {/* Recent entries */}
         <View style={styles.recentHeader}>
@@ -474,4 +544,31 @@ const createStyles = (colors) =>
   expenseButton: { backgroundColor: colors.expense },
   incomeButton: { backgroundColor: colors.income },
   actionText: { color: colors.onColor, fontSize: 16, fontWeight: '600' },
+
+  // Quick expense rail
+  quickSection: {
+    marginTop: spacing.lg,
+    paddingHorizontal: spacing.lg,
+  },
+  quickTitle: { fontSize: 13, fontWeight: '600', color: colors.textMuted, marginBottom: spacing.sm },
+  quickRail: { gap: spacing.sm, paddingRight: spacing.xs },
+  quickChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    minWidth: 100,
+  },
+  quickChipIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  quickChipLabel: { fontSize: 13, fontWeight: '600', color: colors.text },
+  quickChipAmount: { fontSize: 11, color: colors.expense, marginTop: 1 },
 });

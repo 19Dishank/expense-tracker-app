@@ -177,6 +177,22 @@ export default function SettingsScreen({ navigation }) {
 
         <View style={styles.divider} />
 
+        {/* Quick expenses — recurring templates for one-tap logging */}
+        <TouchableOpacity
+          style={styles.row}
+          onPress={() => navigation.navigate('ManageQuickExpenses')}
+          activeOpacity={0.7}
+        >
+          <MaterialCommunityIcons name="lightning-bolt-outline" size={24} color={colors.text} />
+          <View style={styles.rowText}>
+            <Text style={styles.rowTitle}>Quick expenses</Text>
+            <Text style={styles.rowSub}>Set up recurring expense shortcuts</Text>
+          </View>
+          <MaterialCommunityIcons name="chevron-right" size={24} color={colors.textMuted} />
+        </TouchableOpacity>
+
+        <View style={styles.divider} />
+
         {/* Theme appearance selector */}
         <TouchableOpacity
           style={styles.row}

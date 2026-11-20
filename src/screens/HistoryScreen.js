@@ -75,45 +75,67 @@ export default function HistoryScreen({ navigation }) {
     if (!showSavingsCard) {
       return null;
     }
+    // Right panel: total savings including the current period's remaining balance
+    const currentSavings = currentPeriod ? currentPeriod.savings : 0;
+    const grandTotal = totalSavings + currentSavings;
+    const grandIncome = totalIncome + (currentPeriod ? currentPeriod.income : 0);
+    const grandExpense = totalExpense + (currentPeriod ? currentPeriod.expense : 0);
+
     return (
       <View style={styles.savingsCard}>
         {/* Card title */}
         <View style={styles.savingsCardTop}>
           <MaterialCommunityIcons name="piggy-bank-outline" size={20} color={colors.income} />
-          <Text style={styles.savingsCardTitle}>Total Savings</Text>
+          <Text style={styles.savingsCardTitle}>Savings</Text>
         </View>
 
-        {/* Main savings figure */}
-        <Text
-          style={[
-            styles.savingsAmount,
-            { color: totalSavings >= 0 ? colors.income : colors.expense },
-          ]}
-          numberOfLines={1}
-          adjustsFontSizeToFit
-        >
-          {formatINR(totalSavings)}
-        </Text>
-        <Text style={styles.savingsLabel}>Saved so far</Text>
-
-        {/* Income and expense breakdown */}
-        <View style={styles.savingsRow}>
-          <View style={styles.savingsCol}>
-            <Text style={styles.savingsColLabel}>Total income</Text>
-            <Text style={[styles.savingsColValue, { color: colors.income }]}>
-              {formatINR(totalIncome)}
+        {/* Two columns */}
+        <View style={styles.savingsSplit}>
+          {/* Left — past periods only */}
+          <View style={styles.savingsHalf}>
+            <Text style={styles.savingsHalfTitle}>Past periods</Text>
+            <Text
+              style={[styles.savingsBigAmt, { color: totalSavings >= 0 ? colors.income : colors.expense }]}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+            >
+              {formatINR(totalSavings)}
             </Text>
+            <Text style={styles.savingsLabel}>saved</Text>
+            <View style={styles.savingsMiniRow}>
+              <Text style={[styles.savingsMiniAmt, { color: colors.income }]}>{formatINR(totalIncome)}</Text>
+              <Text style={styles.savingsMiniLabel}>income</Text>
+            </View>
+            <View style={styles.savingsMiniRow}>
+              <Text style={[styles.savingsMiniAmt, { color: colors.expense }]}>{formatINR(totalExpense)}</Text>
+              <Text style={styles.savingsMiniLabel}>spent</Text>
+            </View>
           </View>
-          <View style={styles.savingsCol}>
-            <Text style={styles.savingsColLabel}>Total spent</Text>
-            <Text style={[styles.savingsColValue, { color: colors.expense }]}>
-              {formatINR(totalExpense)}
+
+          {/* Vertical divider */}
+          <View style={styles.savingsDivider} />
+
+          {/* Right — grand total including current period */}
+          <View style={styles.savingsHalf}>
+            <Text style={styles.savingsHalfTitle}>Total incl. now</Text>
+            <Text
+              style={[styles.savingsBigAmt, { color: grandTotal >= 0 ? colors.income : colors.expense }]}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+            >
+              {formatINR(grandTotal)}
             </Text>
+            <Text style={styles.savingsLabel}>saved</Text>
+            <View style={styles.savingsMiniRow}>
+              <Text style={[styles.savingsMiniAmt, { color: colors.income }]}>{formatINR(grandIncome)}</Text>
+              <Text style={styles.savingsMiniLabel}>income</Text>
+            </View>
+            <View style={styles.savingsMiniRow}>
+              <Text style={[styles.savingsMiniAmt, { color: colors.expense }]}>{formatINR(grandExpense)}</Text>
+              <Text style={styles.savingsMiniLabel}>spent</Text>
+            </View>
           </View>
         </View>
-
-        {/* Disclaimer */}
-        <Text style={styles.savingsNote}>Current period is not included</Text>
       </View>
     );
   }
@@ -155,43 +177,57 @@ const createStyles = (colors) =>
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
-    marginBottom: spacing.sm,
+    marginBottom: spacing.md,
   },
   savingsCardTitle: {
     fontSize: 15,
     fontWeight: '700',
     color: colors.text,
   },
-  savingsAmount: {
-    fontSize: 28,
-    fontWeight: '700',
-    marginTop: spacing.xs,
-  },
-  savingsLabel: {
-    fontSize: 12,
-    color: colors.textMuted,
-    marginTop: 2,
-  },
-  savingsRow: {
+  // The 50-50 split
+  savingsSplit: {
     flexDirection: 'row',
-    marginTop: spacing.md,
+    gap: 0,
   },
-  savingsCol: {
+  savingsHalf: {
     flex: 1,
   },
-  savingsColLabel: {
-    fontSize: 12,
+  savingsDivider: {
+    width: StyleSheet.hairlineWidth,
+    backgroundColor: colors.border,
+    marginHorizontal: spacing.md,
+    alignSelf: 'stretch',
+  },
+  savingsHalfTitle: {
+    fontSize: 11,
+    fontWeight: '600',
     color: colors.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: spacing.xs,
   },
-  savingsColValue: {
-    fontSize: 15,
+  savingsBigAmt: {
+    fontSize: 22,
     fontWeight: '700',
-    marginTop: 2,
   },
-  savingsNote: {
+  savingsLabel: {
     fontSize: 11,
     color: colors.textMuted,
-    marginTop: spacing.md,
-    fontStyle: 'italic',
+    marginTop: 1,
+    marginBottom: spacing.sm,
+  },
+  savingsMiniRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 4,
+    marginTop: 2,
+  },
+  savingsMiniAmt: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  savingsMiniLabel: {
+    fontSize: 11,
+    color: colors.textMuted,
   },
 });
